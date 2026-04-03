@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Me Lembra Aí — Protótipo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* ── Phone Shell ── */
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: #f2f2f7;
+    border-radius: 54px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.4), inset 0 0 0 2px #1a1a1a;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Status Bar */
+  .status-bar {
+    background: #fff;
+    padding: 14px 28px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .status-bar .time { font-size: 15px; font-weight: 700; }
+  .status-icons { display: flex; gap: 6px; align-items: center; }
+  .status-icons span { font-size: 12px; }
+
+  /* Screens */
+  .screen { display: none; flex-direction: column; height: 100%; overflow: hidden; }
+  .screen.active { display: flex; }
+
+  /* ── HOME SCREEN ── */
+  #home .header {
+    background: linear-gradient(160deg, #6c63ff, #a855f7);
+    padding: 18px 24px 28px;
+    color: white;
+    flex-shrink: 0;
+  }
+  #home .header .greeting { font-size: 13px; opacity: 0.85; margin-bottom: 2px; }
+  #home .header h1 { font-size: 22px; font-weight: 700; margin-bottom: 12px; }
+  #home .header .date-chip {
+    background: rgba(255,255,255,0.2);
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+  }
+
+  .scroll-area { flex: 1; overflow-y: auto; padding: 16px; }
+  .scroll-area::-webkit-scrollbar { display: none; }
+
+  /* Quick Stats */
+  .stats-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    flex: 1;
+    background: white;
+    border-radius: 16px;
+    padding: 14px 12px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .stat-card .num { font-size: 24px; font-weight: 800; color: #6c63ff; }
+  .stat-card .lbl { font-size: 10px; color: #999; margin-top: 2px; }
+
+  /* Section Title */
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1c1c1e;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .section-title a { font-size: 12px; color: #6c63ff; font-weight: 500; cursor: pointer; }
+
+  /* Reminder Cards */
+  .reminder-card {
+    background: white;
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .reminder-card:active { transform: scale(0.98); }
+  .reminder-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .reminder-info { flex: 1; }
+  .reminder-info .title { font-size: 14px; font-weight: 600; color: #1c1c1e; }
+  .reminder-info .sub { font-size: 12px; color: #8e8e93; margin-top: 2px; }
+  .reminder-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6c63ff;
+    text-align: right;
+  }
+  .badge {
+    background: #ff3b30;
+    color: white;
+    border-radius: 10px;
+    font-size: 10px;
+    padding: 2px 6px;
+    font-weight: 700;
+  }
+
+  /* ── CATEGORIES SCREEN ── */
+  #categories .cat-header {
+    background: white;
+    padding: 20px 24px 16px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  #categories .cat-header h2 { font-size: 20px; font-weight: 700; color: #1c1c1e; }
+  #categories .cat-header p { font-size: 13px; color: #8e8e93; margin-top: 4px; }
+
+  .cat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  .cat-card {
+    background: white;
+    border-radius: 18px;
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .cat-card:active { transform: scale(0.97); }
+  .cat-card:hover { box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
+  .cat-icon { font-size: 28px; }
+  .cat-name { font-size: 13px; font-weight: 700; color: #1c1c1e; line-height: 1.2; }
+  .cat-count { font-size: 11px; color: #8e8e93; }
+  .cat-card.wide {
+    grid-column: span 2;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+  .cat-card.wide .cat-info { flex: 1; }
+
+  /* ── ADD REMINDER SCREEN ── */
+  #add-screen .add-header {
+    background: white;
+    padding: 20px 24px 16px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .back-btn {
+    width: 32px; height: 32px;
+    background: #f2f2f7;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  #add-screen .add-header h2 { font-size: 18px; font-weight: 700; }
+
+  .form-area { padding: 16px; }
+  .form-label { font-size: 12px; font-weight: 600; color: #6c63ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; margin-top: 14px; }
+  .form-input {
+    width: 100%;
+    background: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px;
+    color: #1c1c1e;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    outline: none;
+    font-family: inherit;
+  }
+  .form-input::placeholder { color: #c7c7cc; }
+
+  .type-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    background: white;
+    border: 2px solid #e5e5ea;
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: #3c3c43;
+  }
+  .chip.selected {
+    background: #6c63ff;
+    border-color: #6c63ff;
+    color: white;
+  }
+
+  .date-time-row { display: flex; gap: 10px; }
+  .date-time-row .form-input { flex: 1; }
+
+  .repeat-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .repeat-chip {
+    background: #f2f2f7;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #3c3c43;
+    transition: all 0.15s;
+  }
+  .repeat-chip.selected { background: #6c63ff; color: white; }
+
+  .save-btn {
+    background: linear-gradient(135deg, #6c63ff, #a855f7);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    padding: 16px;
+    width: 100%;
+    font-size: 16px;
+    font-weight: 700;
+    margin-top: 20px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.15s;
+  }
+  .save-btn:active { transform: scale(0.98); }
+
+  /* ── DETAIL SCREEN ── */
+  #detail-screen .detail-header {
+    padding: 24px 24px 20px;
+    color: white;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .detail-content { background: #f2f2f7; flex: 1; border-radius: 24px 24px 0 0; padding: 20px; overflow-y: auto; }
+  .detail-content::-webkit-scrollbar { display: none; }
+
+  .detail-row {
+    background: white;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .detail-row .ico { font-size: 20px; }
+  .detail-row .info .lbl { font-size: 11px; color: #8e8e93; }
+  .detail-row .info .val { font-size: 14px; font-weight: 600; color: #1c1c1e; margin-top: 1px; }
+
+  .action-row { display: flex; gap: 10px; margin-top: 16px; }
+  .action-btn {
+    flex: 1; padding: 14px;
+    border-radius: 14px;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.15s;
+  }
+  .action-btn:active { transform: scale(0.97); }
+  .action-btn.primary { background: #6c63ff; color: white; }
+  .action-btn.danger { background: #fff0f0; color: #ff3b30; }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    background: white;
+    display: flex;
+    border-top: 1px solid #f0f0f0;
+    flex-shrink: 0;
+    padding-bottom: 8px;
+  }
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0 4px;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .nav-item:active { transform: scale(0.92); }
+  .nav-item .nav-icon { font-size: 22px; }
+  .nav-item .nav-label { font-size: 9px; font-weight: 600; color: #8e8e93; margin-top: 3px; }
+  .nav-item.active .nav-icon { filter: none; }
+  .nav-item.active .nav-label { color: #6c63ff; }
+  .nav-dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: #6c63ff;
+    margin: 0 auto;
+    margin-top: 2px;
+    opacity: 0;
+  }
+  .nav-item.active .nav-dot { opacity: 1; }
+
+  /* ── FAB ── */
+  .fab {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, #6c63ff, #a855f7);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    color: white;
+    box-shadow: 0 8px 20px rgba(108,99,255,0.4);
+    cursor: pointer;
+    z-index: 10;
+    transition: transform 0.15s;
+    line-height: 1;
+  }
+  .fab:active { transform: scale(0.92); }
+
+  /* Colors for categories */
+  .c-purple { background: #f0eeff; }
+  .c-pink   { background: #fff0f5; }
+  .c-blue   { background: #e8f4ff; }
+  .c-green  { background: #edfff4; }
+  .c-orange { background: #fff5e8; }
+  .c-red    { background: #fff0f0; }
+  .c-teal   { background: #e8fffe; }
+  .c-yellow { background: #fffbe8; }
+
+  /* Notification pill */
+  .notif-pill {
+    background: linear-gradient(135deg, #ff9500, #ff6b00);
+    color: white;
+    border-radius: 14px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .notif-pill .ico { font-size: 18px; }
+
+  /* Subtitle label */
+  .sub-events { font-size: 11px; color: #8e8e93; margin-top: 4px; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 40px 20px; color: #8e8e93; }
+  .empty .ico { font-size: 48px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="time">09:41</span>
+    <div class="status-icons">
+      <span>●●●</span>
+      <span>WiFi</span>
+      <span>🔋</span>
+    </div>
+  </div>
+
+  <!-- ══ HOME SCREEN ══ -->
+  <div class="screen active" id="home">
+    <div class="header">
+      <div class="greeting">Bom dia, André 👋</div>
+      <h1>Me Lembra Aí</h1>
+      <div class="date-chip">📅 Sexta-feira, 27 de março</div>
+    </div>
+
+    <div class="scroll-area">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="num">3</div>
+          <div class="lbl">Hoje</div>
+        </div>
+        <div class="stat-card">
+          <div class="num">7</div>
+          <div class="lbl">Esta semana</div>
+        </div>
+        <div class="stat-card">
+          <div class="num">2</div>
+          <div class="lbl">Atrasados</div>
+        </div>
+      </div>
+
+      <!-- Notification Pill -->
+      <div class="notif-pill">
+        <span class="ico">⚠️</span>
+        <div>
+          <div>Remédio das 10h em 18 minutos!</div>
+          <div style="opacity:0.8;font-weight:400">Losartana 50mg</div>
+        </div>
+      </div>
+
+      <!-- Today's reminders -->
+      <div class="section-title">
+        Hoje <a onclick="showScreen('categories')">Ver todos →</a>
+      </div>
+
+      <div class="reminder-card" onclick="showDetail('remedio')">
+        <div class="reminder-icon c-pink">💊</div>
+        <div class="reminder-info">
+          <div class="title">Losartana 50mg</div>
+          <div class="sub">Remédio · Todos os dias</div>
+        </div>
+        <div class="reminder-time">10:00<br><span class="badge">HOJ</span></div>
+      </div>
+
+      <div class="reminder-card" onclick="showDetail('consulta')">
+        <div class="reminder-icon c-blue">🩺</div>
+        <div class="reminder-info">
+          <div class="title">Consulta Dr. Carlos</div>
+          <div class="sub">Cardiologista · Clínica Saúde+</div>
+        </div>
+        <div class="reminder-time">14:30</div>
+      </div>
+
+      <div class="reminder-card" onclick="showDetail('aniversario')">
+        <div class="reminder-icon c-yellow">🎂</div>
+        <div class="reminder-info">
+          <div class="title">Aniversário da Ju</div>
+          <div class="sub">Lembrar de ligar</div>
+        </div>
+        <div class="reminder-time">Hoje</div>
+      </div>
+
+      <!-- Upcoming -->
+      <div class="section-title" style="margin-top:8px">
+        Em breve
+      </div>
+
+      <div class="reminder-card">
+        <div class="reminder-icon c-orange">🛒</div>
+        <div class="reminder-info">
+          <div class="title">Mercado</div>
+          <div class="sub">Lista com 8 itens</div>
+        </div>
+        <div class="reminder-time">Amanhã</div>
+      </div>
+
+      <div class="reminder-card">
+        <div class="reminder-icon c-purple">🤝</div>
+        <div class="reminder-info">
+          <div class="title">Reunião de Sprint</div>
+          <div class="sub">Segunda · 09:00</div>
+        </div>
+        <div class="reminder-time">28 mar</div>
+      </div>
+
+      <div class="reminder-card">
+        <div class="reminder-icon c-teal">💧</div>
+        <div class="reminder-info">
+          <div class="title">Tomar água</div>
+          <div class="sub">A cada 2 horas · Recorrente</div>
+        </div>
+        <div class="reminder-time">12:00</div>
+      </div>
+
+      <div style="height: 16px;"></div>
+    </div>
+  </div>
+
+  <!-- ══ CATEGORIES SCREEN ══ -->
+  <div class="screen" id="categories">
+    <div class="cat-header">
+      <h2>Categorias</h2>
+      <p>Escolha o tipo de lembrete</p>
+    </div>
+
+    <div class="scroll-area" style="padding:12px">
+      <div class="cat-grid">
+
+        <div class="cat-card" onclick="showAdd('Remédios')">
+          <span class="cat-icon">💊</span>
+          <div class="cat-name">Remédios</div>
+          <div class="cat-count">4 ativos</div>
+        </div>
+
+        <div class="cat-card" onclick="showAdd('Consultas')">
+          <span class="cat-icon">🩺</span>
+          <div class="cat-name">Consultas</div>
+          <div class="cat-count">1 agendada</div>
+        </div>
+
+        <div class="cat-card c-orange" onclick="showAdd('Mercado')">
+          <span class="cat-icon">🛒</span>
+          <div class="cat-name">Mercado</div>
+          <div class="cat-count">Lista de compras</div>
+        </div>
+
+        <div class="cat-card c-yellow" onclick="showAdd('Aniversários')">
+          <span class="cat-icon">🎂</span>
+          <div class="cat-name">Aniversários</div>
+          <div class="cat-count">3 este mês</div>
+        </div>
+
+        <!-- Eventos - wide card -->
+        <div class="cat-card wide c-purple" onclick="showAdd('Eventos')">
+          <span class="cat-icon">🗓️</span>
+          <div class="cat-info">
+            <div class="cat-name">Eventos</div>
+            <div class="cat-count">Reuniões · Viagens · Churrascos · Conferências</div>
+          </div>
+          <span style="font-size:18px;color:#6c63ff">›</span>
+        </div>
+
+        <div class="cat-card c-green" onclick="showAdd('Lista de Tarefas')">
+          <span class="cat-icon">✅</span>
+          <div class="cat-name">Lista de Tarefas</div>
+          <div class="cat-count">5 pendentes</div>
+        </div>
+
+        <div class="cat-card c-blue" onclick="showAdd('Lista')">
+          <span class="cat-icon">📋</span>
+          <div class="cat-name">Lista</div>
+          <div class="cat-count">Genérica</div>
+        </div>
+
+        <!-- Recorrentes - wide -->
+        <div class="cat-card wide c-teal" onclick="showAdd('Lembretes Recorrentes')">
+          <span class="cat-icon">🔁</span>
+          <div class="cat-info">
+            <div class="cat-name">Lembretes Recorrentes</div>
+            <div class="cat-count">Ex: Tomar água, vitaminas, exercícios</div>
+          </div>
+          <span style="font-size:18px;color:#00b4a6">›</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ADD REMINDER SCREEN ══ -->
+  <div class="screen" id="add-screen">
+    <div class="add-header">
+      <div class="back-btn" onclick="showScreen('categories')">‹</div>
+      <h2 id="add-title">Novo Lembrete</h2>
+    </div>
+
+    <div class="scroll-area">
+      <div class="form-area">
+
+        <div class="form-label">Tipo</div>
+        <div class="type-chips" id="type-chips">
+          <span class="chip selected" onclick="selectChip(this)">💊 Remédio</span>
+          <span class="chip" onclick="selectChip(this)">🩺 Consulta</span>
+          <span class="chip" onclick="selectChip(this)">🎂 Aniversário</span>
+          <span class="chip" onclick="selectChip(this)">🗓️ Evento</span>
+          <span class="chip" onclick="selectChip(this)">✅ Tarefa</span>
+          <span class="chip" onclick="selectChip(this)">🔁 Recorrente</span>
+        </div>
+
+        <div class="form-label">Título</div>
+        <input class="form-input" type="text" placeholder="Ex: Losartana 50mg...">
+
+        <div class="form-label">Descrição (opcional)</div>
+        <input class="form-input" type="text" placeholder="Observações adicionais...">
+
+        <div class="form-label">Data e Hora</div>
+        <div class="date-time-row">
+          <input class="form-input" type="text" placeholder="📅 27/03/2026" style="flex:1.4">
+          <input class="form-input" type="text" placeholder="⏰ 10:00" style="flex:1">
+        </div>
+
+        <div class="form-label">Repetição</div>
+        <div class="repeat-options">
+          <span class="repeat-chip selected" onclick="selectRepeat(this)">Nunca</span>
+          <span class="repeat-chip" onclick="selectRepeat(this)">Diário</span>
+          <span class="repeat-chip" onclick="selectRepeat(this)">Semanal</span>
+          <span class="repeat-chip" onclick="selectRepeat(this)">Mensal</span>
+          <span class="repeat-chip" onclick="selectRepeat(this)">Anual</span>
+        </div>
+
+        <div class="form-label">Notificação</div>
+        <select class="form-input" style="appearance:none">
+          <option>🔔 Na hora</option>
+          <option>🔔 5 minutos antes</option>
+          <option selected>🔔 15 minutos antes</option>
+          <option>🔔 30 minutos antes</option>
+          <option>🔔 1 hora antes</option>
+          <option>🔔 1 dia antes</option>
+        </select>
+
+        <button class="save-btn" onclick="showScreen('home')">✓ Salvar Lembrete</button>
+
+        <div style="height:20px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DETAIL SCREEN ══ -->
+  <div class="screen" id="detail-screen">
+    <div id="detail-header-bg" style="background:linear-gradient(160deg,#ff6b9d,#c44dff);flex-shrink:0">
+      <div class="detail-header">
+        <div class="back-btn" onclick="goBackDetail()" style="background:rgba(255,255,255,0.2);color:white">‹</div>
+        <div style="flex:1">
+          <div style="font-size:11px;opacity:0.8;margin-bottom:4px" id="detail-type">REMÉDIO</div>
+          <div style="font-size:20px;font-weight:700" id="detail-title">Losartana 50mg</div>
+        </div>
+        <div style="font-size:36px" id="detail-emoji">💊</div>
+      </div>
+    </div>
+
+    <div class="detail-content">
+      <div class="detail-row">
+        <span class="ico">⏰</span>
+        <div class="info">
+          <div class="lbl">Horário</div>
+          <div class="val" id="detail-time">10:00 · Todos os dias</div>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="ico">📅</span>
+        <div class="info">
+          <div class="lbl">Data</div>
+          <div class="val" id="detail-date">A partir de 27/03/2026</div>
+        </div>
+      </div>
+      <div class="detail-row">
+        <span class="ico">🔔</span>
+        <div class="info">
+          <div class="lbl">Notificação</div>
+          <div class="val" id="detail-notif">15 minutos antes</div>
+        </div>
+      </div>
+      <div class="detail-row" id="detail-note-row">
+        <span class="ico">📝</span>
+        <div class="info">
+          <div class="lbl">Observação</div>
+          <div class="val" id="detail-note">Tomar com água, após o café</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="action-btn primary" onclick="showScreen('home')">✏️ Editar</button>
+        <button class="action-btn danger" onclick="showScreen('home')">🗑️ Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ FAB ══ -->
+  <div class="fab" onclick="showAdd('Novo')" id="fab">+</div>
+
+  <!-- ══ BOTTOM NAV ══ -->
+  <div class="bottom-nav">
+    <div class="nav-item active" id="nav-home" onclick="showScreen('home')">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Início</span>
+      <div class="nav-dot"></div>
+    </div>
+    <div class="nav-item" id="nav-cats" onclick="showScreen('categories')">
+      <span class="nav-icon">🗂️</span>
+      <span class="nav-label">Categorias</span>
+      <div class="nav-dot"></div>
+    </div>
+    <div class="nav-item" id="nav-add" onclick="showAdd('Novo')">
+      <span class="nav-icon">➕</span>
+      <span class="nav-label">Adicionar</span>
+      <div class="nav-dot"></div>
+    </div>
+    <div class="nav-item" id="nav-config">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Config</span>
+      <div class="nav-dot"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let prevScreen = 'home';
+
+  const detailData = {
+    remedio: {
+      type: 'REMÉDIO', title: 'Losartana 50mg', emoji: '💊',
+      bg: 'linear-gradient(160deg,#ff6b9d,#c44dff)',
+      time: '10:00 · Todos os dias', date: 'A partir de 27/03/2026',
+      notif: '15 minutos antes', note: 'Tomar com água, após o café'
+    },
+    consulta: {
+      type: 'CONSULTA', title: 'Consulta Dr. Carlos', emoji: '🩺',
+      bg: 'linear-gradient(160deg,#4facfe,#00f2fe)',
+      time: '14:30 · Uma vez', date: '27/03/2026',
+      notif: '1 hora antes', note: 'Cardiologista · Clínica Saúde+'
+    },
+    aniversario: {
+      type: 'ANIVERSÁRIO', title: 'Aniversário da Ju', emoji: '🎂',
+      bg: 'linear-gradient(160deg,#f7971e,#ffd200)',
+      time: 'Todo ano · 27 de março', date: '27/03/2026',
+      notif: '1 dia antes', note: 'Lembrar de ligar ou mandar presente'
+    }
+  };
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+
+    // FAB visibility
+    document.getElementById('fab').style.display =
+      (id === 'home' || id === 'categories') ? 'flex' : 'none';
+
+    // Nav active state
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (id === 'home')       document.getElementById('nav-home').classList.add('active');
+    if (id === 'categories') document.getElementById('nav-cats').classList.add('active');
+    if (id === 'add-screen') document.getElementById('nav-add').classList.add('active');
+
+    prevScreen = id;
+  }
+
+  function showAdd(type) {
+    document.getElementById('add-title').textContent = 'Novo · ' + type;
+    showScreen('add-screen');
+  }
+
+  function showDetail(key) {
+    const d = detailData[key];
+    document.getElementById('detail-type').textContent  = d.type;
+    document.getElementById('detail-title').textContent = d.title;
+    document.getElementById('detail-emoji').textContent = d.emoji;
+    document.getElementById('detail-header-bg').style.background = d.bg;
+    document.getElementById('detail-time').textContent  = d.time;
+    document.getElementById('detail-date').textContent  = d.date;
+    document.getElementById('detail-notif').textContent = d.notif;
+    document.getElementById('detail-note').textContent  = d.note;
+    showScreen('detail-screen');
+  }
+
+  function goBackDetail() {
+    showScreen('home');
+  }
+
+  function selectChip(el) {
+    document.querySelectorAll('#type-chips .chip').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+
+  function selectRepeat(el) {
+    document.querySelectorAll('.repeat-chip').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+</script>
+</body>
+</html>
