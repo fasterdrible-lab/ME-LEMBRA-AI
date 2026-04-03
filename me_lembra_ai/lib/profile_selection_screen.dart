@@ -19,7 +19,7 @@ class ProfileSelectionScreen extends StatelessWidget {
   Widget _cardPerfil(
     BuildContext context,
     String titulo,
-    IconData icone,
+    String imagem,
     Color cor,
     String descricao,
   ) {
@@ -38,37 +38,35 @@ class ProfileSelectionScreen extends StatelessWidget {
             )
           ],
         ),
-        child: Row(
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: 32,
-              backgroundColor: cor.withOpacity(0.15),
-              child: Icon(icone, color: cor, size: 32),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titulo,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    descricao,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ],
+            Center(
+              child: Image.asset(
+                imagem,
+                width: 120,
+                height: 120,
+                fit: BoxFit.contain,
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.black26),
+            const SizedBox(height: 12),
+            Text(
+              titulo,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: cor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              descricao,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black54,
+              ),
+            ),
           ],
         ),
       ),
@@ -84,17 +82,17 @@ class ProfileSelectionScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           child: Column(
             children: [
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4A90D9),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Icon(Icons.notifications_active,
-                    color: Colors.white, size: 48),
+                    color: Colors.white, size: 44),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
               const Text(
                 "ME LEMBRA AI",
                 style: TextStyle(
@@ -103,33 +101,33 @@ class ProfileSelectionScreen extends StatelessWidget {
                   color: Color(0xFF4A90D9),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               const Text(
                 "Quem vai usar o aplicativo?",
-                style: TextStyle(fontSize: 16, color: Colors.black54),
+                style: TextStyle(fontSize: 15, color: Colors.black54),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
               Expanded(
                 child: ListView(
                   children: [
                     _cardPerfil(
                       context,
                       "Vovô / Vovó",
-                      Icons.elderly,
+                      "assets/images/avos.png",
                       const Color(0xFF4A90D9),
                       "Interface acessível com alertas por voz e SOS",
                     ),
                     _cardPerfil(
                       context,
                       "Adulto",
-                      Icons.person,
+                      "assets/images/adultos.png",
                       const Color(0xFF50C878),
                       "Lembretes inteligentes e agenda integrada",
                     ),
                     _cardPerfil(
                       context,
                       "Criança",
-                      Icons.child_care,
+                      "assets/images/crianca.png",
                       const Color(0xFFFF8C00),
                       "Monitorado por responsável com localização",
                     ),
