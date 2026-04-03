@@ -19,9 +19,9 @@ class ProfileSelectionScreen extends StatelessWidget {
   Widget _cardPerfil(
     BuildContext context,
     String titulo,
-    String imagem,
-    Color cor,
     IconData icone,
+    Color cor,
+    String descricao,
   ) {
     return GestureDetector(
       onTap: () => _entrar(context, titulo),
@@ -59,7 +59,7 @@ class ProfileSelectionScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _descricao(titulo),
+                    descricao,
                     style: const TextStyle(
                       fontSize: 13,
                       color: Colors.black54,
@@ -73,19 +73,6 @@ class ProfileSelectionScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _descricao(String titulo) {
-    switch (titulo) {
-      case 'Vovô / Vovó':
-        return 'Interface acessível com alertas por voz e SOS';
-      case 'Adulto':
-        return 'Lembretes inteligentes e agenda integrada';
-      case 'Criança':
-        return 'Monitorado por responsável com localização';
-      default:
-        return '';
-    }
   }
 
   @override
@@ -119,10 +106,7 @@ class ProfileSelectionScreen extends StatelessWidget {
               const SizedBox(height: 8),
               const Text(
                 "Quem vai usar o aplicativo?",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black54,
-                ),
+                style: TextStyle(fontSize: 16, color: Colors.black54),
               ),
               const SizedBox(height: 36),
               Expanded(
@@ -131,23 +115,23 @@ class ProfileSelectionScreen extends StatelessWidget {
                     _cardPerfil(
                       context,
                       "Vovô / Vovó",
-                      "assets/images/avos.png",
-                      const Color(0xFF4A90D9),
                       Icons.elderly,
+                      const Color(0xFF4A90D9),
+                      "Interface acessível com alertas por voz e SOS",
                     ),
                     _cardPerfil(
                       context,
                       "Adulto",
-                      "assets/images/adultos.png",
-                      const Color(0xFF50C878),
                       Icons.person,
+                      const Color(0xFF50C878),
+                      "Lembretes inteligentes e agenda integrada",
                     ),
                     _cardPerfil(
                       context,
                       "Criança",
-                      "assets/images/crianca.png",
-                      const Color(0xFFFF8C00),
                       Icons.child_care,
+                      const Color(0xFFFF8C00),
+                      "Monitorado por responsável com localização",
                     ),
                   ],
                 ),
