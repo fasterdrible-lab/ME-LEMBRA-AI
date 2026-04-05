@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'services/profile_service.dart';
 
 class ConfigScreen extends StatefulWidget {
@@ -145,6 +146,43 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 onTap: () {},
               ),
             ])),
+            const SizedBox(height: 16),
+            _secao('CONTA'),
+            _card(child: ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0xFFFFEBEE),
+                child: Icon(Icons.logout, color: Color(0xFFE53935)),
+              ),
+              title: const Text('Sair da conta', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFE53935))),
+              subtitle: const Text('Encerrar sessão atual'),
+              onTap: () async {
+                final confirmar = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    title: const Text('Sair da conta'),
+                    content: const Text('Tem certeza que deseja sair?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE53935),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Sair'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmar == true) {
+                  await FirebaseAuth.instance.signOut();
+                }
+              },
+            )),
             const SizedBox(height: 30),
           ],
         ),
