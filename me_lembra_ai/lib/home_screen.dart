@@ -87,8 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ]),
         content: const Text('Deseja enviar um alerta de emergencia para seus contatos?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),\n          ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFE53935),
               foregroundColor: Colors.white,
@@ -204,7 +203,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                         child: const Center(
                           child: Text(
-                            'Nenhum lembrete.\nToque em Adicionar!',
+                            'Nenhum lembrete.
+Toque em Adicionar!',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.black45),
                           ),
