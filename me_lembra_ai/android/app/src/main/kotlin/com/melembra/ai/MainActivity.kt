@@ -1,4 +1,4 @@
-package com.example.me_lembra_ai
+package com.melembra.ai
 
 import io.flutter.embedding.android.FlutterActivity
 

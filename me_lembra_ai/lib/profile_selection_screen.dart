@@ -84,13 +84,20 @@ class ProfileSelectionScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4A90D9),
+                  color: const Color(0xFFFFE040),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Icon(Icons.notifications_active,
-                    color: Colors.white, size: 44),
+                child: const Text(
+                  "ME\nLEMBRA\nAÍ",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               const Text(
