@@ -93,13 +93,13 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     String descricao,
   ) {
     final size = MediaQuery.sizeOf(context);
-    final imageSize = math.min(120.0, size.width * 0.30);
+    final imageSize = math.min(90.0, size.width * 0.22);
 
     return GestureDetector(
       onTap: () => _askNameIfNeededAndEnter(titulo),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -152,11 +152,11 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
       backgroundColor: const Color(0xFFF2F2F7),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: ListView(
             children: [
               // ── Header ──────────────────────────────────────
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Center(
                 child: Container(
                   padding: const EdgeInsets.all(14),
@@ -189,10 +189,10 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                   style: TextStyle(fontSize: 15, color: Colors.black54),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
               // ── Cards ────────────────────────────────────────
               _cardPerfil(
-                'Vovo / Vova',
+                'Vovô / Vovó',
                 'assets/images/avos.png',
                 const Color(0xFF4A90D9),
                 'Interface acessivel com alertas por voz e SOS',
