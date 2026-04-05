@@ -266,26 +266,25 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       body: telas[_abaAtual],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final resultado = await Navigator.push<String>(
-            context,
-            MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
-          );
-          if (resultado != null && resultado.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            final lista = prefs.getStringList('lembretes') ?? [];
-            lista.add(resultado);
-            await prefs.setStringList('lembretes', lista);
-            _carregarLembretes();
-          }
-        },
-        backgroundColor: const Color(0xFF7B5EA7),
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
-      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _abaAtual == 3 ? 3 : _abaAtual,
-        onTap: (i) => setState(() => _abaAtual = i),
+        onTap: (i) async {
+          if (i == 2) {
+            final resultado = await Navigator.push<String>(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
+            );
+            if (resultado != null && resultado.isNotEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              final lista = prefs.getStringList('lembretes') ?? [];
+              lista.add(resultado);
+              await prefs.setStringList('lembretes', lista);
+              _carregarLembretes();
+            }
+          } else {
+            setState(() => _abaAtual = i);
+          }
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF7B5EA7),
         unselectedItemColor: Colors.grey,
