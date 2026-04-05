@@ -1,165 +1,331 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/profile_service.dart';
+import 'create_reminder_screen.dart';
 import 'reminders_screen.dart';
+import 'categories_screen.dart';
+import 'config_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   String _perfil = '';
+  String _dataFormatada = '';
+  List<String> _lembretes = [];
+  int _abaAtual = 0;
 
   @override
   void initState() {
     super.initState();
     _carregarPerfil();
+    _carregarData();
+    _carregarLembretes();
   }
 
   Future<void> _carregarPerfil() async {
     final perfil = await ProfileService.getProfile();
-    setState(() {
-      _perfil = perfil ?? 'Adulto';
-    });
+    setState(() => _perfil = perfil ?? 'Andre');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F7),
-      appBar: AppBar(
-        title: const Text(
-          'ME LEMBRA AI',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF4A90D9),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Olá, $_perfil! 👋',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'O que você precisa hoje?',
-                style: TextStyle(color: Colors.black54, fontSize: 16),
-              ),
-              const SizedBox(height: 30),
-              Expanded(
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  children: [
-                    _menuCard(
-                      context,
-                      icon: Icons.alarm,
-                      label: 'Lembretes',
-                      color: const Color(0xFF4A90D9),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RemindersScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _menuCard(
-                      context,
-                      icon: Icons.medication,
-                      label: 'Remédios',
-                      color: const Color(0xFF50C878),
-                      onTap: () {},
-                    ),
-                    _menuCard(
-                      context,
-                      icon: Icons.location_on,
-                      label: 'Localização',
-                      color: const Color(0xFFFF8C00),
-                      onTap: () {},
-                    ),
-                    _menuCard(
-                      context,
-                      icon: Icons.chat_bubble,
-                      label: 'Chat Familiar',
-                      color: const Color(0xFF9B59B6),
-                      onTap: () {},
-                    ),
-                    _menuCard(
-                      context,
-                      icon: Icons.bar_chart,
-                      label: 'Relatórios',
-                      color: const Color(0xFF1ABC9C),
-                      onTap: () {},
-                    ),
-                    _menuCard(
-                      context,
-                      icon: Icons.warning_amber_rounded,
-                      label: 'SOS',
-                      color: const Color(0xFFE74C3C),
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ],
+  void _carregarData() {
+    final now = DateTime.now();
+    const dias = ['Segunda-feira','Terca-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sabado','Domingo'];
+    const meses = ['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    setState(() => _dataFormatada = dias[now.weekday - 1] + ', ' + now.day.toString() + ' de ' + meses[now.month - 1]);
+  }
+
+  Future<void> _carregarLembretes() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() => _lembretes = prefs.getStringList('lembretes') ?? []);
+  }
+
+  String _getEmoji(String raw) {
+    final tipo = raw.split('|').first;
+    switch (tipo) {
+      case 'Remedio': return '💊';
+      case 'Consulta': return '🩺';
+      case 'Aniversario': return '🎂';
+      case 'Mercado': return '🛒';
+      case 'Reuniao': return '🤝';
+      case 'Tomar': return '💧';
+      default: return '🔔';
+    }
+  }
+
+  String _getTitulo(String raw) {
+    final parts = raw.split('|');
+    return parts.length > 1 ? parts[1] : raw;
+  }
+
+  String _getSubtitulo(String raw) {
+    final parts = raw.split('|');
+    if (parts.length < 2) return '';
+    final tipo = parts[0];
+    final desc = parts.length > 2 ? parts[2] : '';
+    if (desc.isNotEmpty) return tipo + ' · ' + desc;
+    return tipo;
+  }
+
+  String _getHora(String raw) {
+    final parts = raw.split('|');
+    return parts.length > 4 ? parts[4] : '';
+  }
+
+  void _mostrarSOS() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Text('🆘', style: TextStyle(fontSize: 28)),
+          SizedBox(width: 10),
+          Text('Botao de Panico', style: TextStyle(fontWeight: FontWeight.bold)),
+        ]),
+        content: const Text('Deseja enviar um alerta de emergencia para seus contatos?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE53935),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Enviar SOS'),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _menuCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 10,
-              color: Colors.black.withOpacity(0.07),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: color.withOpacity(0.15),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+  Widget _buildHome() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 50, 20, 28),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF7B5EA7), Color(0xFF5B4FCF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
               ),
             ),
-          ],
-        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Bom dia, ' + _perfil + '! 👋',
+                      style: const TextStyle(color: Colors.white70, fontSize: 16),
+                    ),
+                    Row(children: [
+                      GestureDetector(
+                        onTap: () {},
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text('💬', style: TextStyle(fontSize: 18)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _mostrarSOS,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE53935),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text('🆘', style: TextStyle(fontSize: 18)),
+                        ),
+                      ),
+                    ]),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Me Lembra Ai',
+                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today, color: Colors.white, size: 14),
+                      const SizedBox(width: 6),
+                      Text(_dataFormatada, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    TextButton(
+                      onPressed: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const RemindersScreen())),
+                      child: const Text('Ver todos ->', style: TextStyle(color: Color(0xFF7B5EA7))),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _lembretes.isEmpty
+                    ? Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: const Center(
+                          child: Text(
+                            'Nenhum lembrete.\nToque em Adicionar!',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.black45),
+                          ),
+                        ),
+                      )
+                    : Column(children: _lembretes.take(3).map((l) => _lembreteCard(l)).toList()),
+                const SizedBox(height: 24),
+                const Text('Em breve', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                _lembretes.length > 3
+                    ? Column(children: _lembretes.skip(3).map((l) => _lembreteCard(l)).toList())
+                    : Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                        child: const Center(
+                          child: Text('Nenhum lembrete em breve.', style: TextStyle(color: Colors.black45)),
+                        ),
+                      ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lembreteCard(String raw) {
+    final titulo = _getTitulo(raw);
+    final subtitulo = _getSubtitulo(raw);
+    final emoji = _getEmoji(raw);
+    final hora = _getHora(raw);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black12)],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(12)),
+            child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                if (subtitulo.isNotEmpty)
+                  Text(subtitulo, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                hora.isNotEmpty ? hora : 'Hoje',
+                style: const TextStyle(color: Color(0xFF7B5EA7), fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              if (hora.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0xFFE53935), borderRadius: BorderRadius.circular(6)),
+                  child: const Text('HOJ', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final telas = [
+      _buildHome(),
+      const CategoriesScreen(),
+      const SizedBox(),
+      const ConfigScreen(),
+    ];
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F2F7),
+      body: telas[_abaAtual],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _abaAtual,
+        onTap: (i) async {
+          if (i == 2) {
+            final resultado = await Navigator.push<String>(
+              context,
+              MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
+            );
+            if (resultado != null && resultado.isNotEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              final lista = prefs.getStringList('lembretes') ?? [];
+              lista.add(resultado);
+              await prefs.setStringList('lembretes', lista);
+              _carregarLembretes();
+            }
+          } else {
+            setState(() => _abaAtual = i > 2 ? i - 1 : i);
+          }
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF7B5EA7),
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        elevation: 12,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Icon(Icons.folder_rounded), label: 'Categorias'),
+          BottomNavigationBarItem(icon: Icon(Icons.add_circle_rounded, size: 32), label: 'Adicionar'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Config'),
+        ],
       ),
     );
   }
