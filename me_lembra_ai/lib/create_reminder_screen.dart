@@ -66,8 +66,14 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
       );
 
       await ReminderService.add(reminder);
+
+      // ID limitado a 32 bits (exigido pelo flutter_local_notifications)
+      final notifId = (titulo.hashCode ^ dateTime.millisecondsSinceEpoch)
+          .remainder(2147483647)
+          .abs();
+
       await NotificationService.scheduleReminder(
-        id: reminder.title.hashCode ^ reminder.dateTime.millisecondsSinceEpoch,
+        id: notifId,
         title: _getNotificationTitle(tipo),
         body: titulo,
         scheduledDate: dateTime,
