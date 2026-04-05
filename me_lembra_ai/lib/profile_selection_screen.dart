@@ -204,8 +204,8 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                 'Lembretes inteligentes e agenda integrada',
               ),
               _cardPerfil(
-                'Crianca',
-                'assets/images/crianca.png',
+                'Filhos',
+                'assets/images/filhos.png',
                 const Color(0xFFFF8C00),
                 'Monitorado por responsavel com localizacao',
               ),
