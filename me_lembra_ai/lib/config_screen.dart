@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'services/profile_service.dart';
 
 class ConfigScreen extends StatefulWidget {
   const ConfigScreen({super.key});
@@ -11,6 +12,55 @@ class _ConfigScreenState extends State<ConfigScreen> {
   bool _sos = false;
   bool _chat = false;
   bool _notificacoes = true;
+  String _nomeAtual = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarNome();
+  }
+
+  Future<void> _carregarNome() async {
+    final nome = await ProfileService.getNameForSelectedProfile();
+    if (mounted) setState(() => _nomeAtual = nome ?? '');
+  }
+
+  Future<void> _abrirEditarNome() async {
+    final perfil = await ProfileService.getProfile();
+    if (perfil == null) return;
+    final controller = TextEditingController(text: _nomeAtual);
+    if (!mounted) return;
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Alterar nome'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Seu nome'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7B5EA7),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+    if (resultado != null && resultado.isNotEmpty) {
+      await ProfileService.saveNameForProfile(perfil, resultado);
+      if (mounted) setState(() => _nomeAtual = resultado);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,9 +78,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
             _card(child: ListTile(
               leading: const CircleAvatar(backgroundColor: Color(0xFFEDE7F6), child: Icon(Icons.person, color: Color(0xFF7B5EA7))),
               title: const Text('Meu Perfil', style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Nome, foto e informacoes'),
+              subtitle: Text(_nomeAtual.isNotEmpty ? _nomeAtual : 'Nome, foto e informacoes'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {},
+              onTap: _abrirEditarNome,
             )),
             const SizedBox(height: 16),
             _secao('FUNCIONALIDADES'),
@@ -40,7 +90,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 title: const Text('Localizacao', style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: const Text('Compartilhar localizacao com familia'),
                 value: _localizacao,
-                activeColor: const Color(0xFF7B5EA7),
+                activeThumbColor: const Color(0xFF7B5EA7),
                 onChanged: (v) => setState(() => _localizacao = v),
               ),
               const Divider(height: 1, indent: 70),
@@ -49,7 +99,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 title: const Text('Botao de Panico (SOS)', style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: const Text('Enviar alerta de emergencia'),
                 value: _sos,
-                activeColor: const Color(0xFF7B5EA7),
+                activeThumbColor: const Color(0xFF7B5EA7),
                 onChanged: (v) => setState(() => _sos = v),
               ),
               if (_sos) Padding(
@@ -70,7 +120,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 title: const Text('Chat Familiar', style: TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: const Text('Ativar comunicacao com familia'),
                 value: _chat,
-                activeColor: const Color(0xFF7B5EA7),
+                activeThumbColor: const Color(0xFF7B5EA7),
                 onChanged: (v) => setState(() => _chat = v),
               ),
             ])),
@@ -81,7 +131,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
               title: const Text('Notificacoes', style: TextStyle(fontWeight: FontWeight.w600)),
               subtitle: const Text('Receber alertas de lembretes'),
               value: _notificacoes,
-              activeColor: const Color(0xFF7B5EA7),
+              activeThumbColor: const Color(0xFF7B5EA7),
               onChanged: (v) => setState(() => _notificacoes = v),
             )),
             const SizedBox(height: 16),
@@ -110,7 +160,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
   Widget _card({required Widget child}) => Container(
     margin: const EdgeInsets.only(bottom: 4),
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
-      boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black.withOpacity(0.04))]),
+      boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black.withValues(alpha: 0.04))]),
     child: child,
   );
 }

@@ -54,7 +54,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
     final parts = raw.split('|');
     final tipo = parts[0];
     final desc = parts.length > 2 ? parts[2] : '';
-    if (desc.isNotEmpty) return tipo + ' - ' + desc;
+    if (desc.isNotEmpty) return '$tipo - $desc';
     return tipo;
   }
 
@@ -130,7 +130,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black12)],
+                    boxShadow: [const BoxShadow(blurRadius: 6, color: Colors.black12)],
                   ),
                   child: Row(
                     children: [
