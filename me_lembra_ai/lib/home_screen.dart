@@ -14,6 +14,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _perfil = '';
+  String _nomeUsuario = '';
   String _dataFormatada = '';
   List<String> _lembretes = [];
   int _abaAtual = 0;
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _carregarPerfil();
+    _carregarNome();
     _carregarData();
     _carregarLembretes();
   }
@@ -29,6 +31,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _carregarPerfil() async {
     final perfil = await ProfileService.getProfile();
     setState(() => _perfil = perfil ?? 'Voce');
+  }
+
+  Future<void> _carregarNome() async {
+    final nome = await ProfileService.getNameForSelectedProfile();
+    if (mounted) setState(() => _nomeUsuario = nome ?? '');
+  }
+
+  String _getSaudacao() {
+    final hora = DateTime.now().hour;
+    if (hora < 12) return 'Bom dia';
+    if (hora < 18) return 'Boa tarde';
+    return 'Boa noite';
   }
 
   void _carregarData() {
@@ -139,7 +153,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Bom dia, ' + _perfil + '! 👋',
+                Text(
+                  _nomeUsuario.isNotEmpty
+                      ? '${_getSaudacao()}, $_nomeUsuario! 👋'
+                      : '${_getSaudacao()}! 👋',
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
                 const SizedBox(height: 6),
