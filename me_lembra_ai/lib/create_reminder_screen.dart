@@ -29,8 +29,8 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
     final titulo = _tituloController.text.trim();
     final desc = _descController.text.trim();
     if (titulo.isEmpty) return;
-    final hora = selectedTime.hour.toString().padLeft(2, '0') + ':' + selectedTime.minute.toString().padLeft(2, '0');
-    final resultado = tipo + '|' + titulo + '|' + desc + '|unico|' + hora;
+    final hora = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+    final resultado = '$tipo|$titulo|$desc|unico|$hora';
     Navigator.pop(context, resultado);
   }
 
@@ -138,7 +138,7 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _pickDate,
                     icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text(selectedDate.day.toString().padLeft(2,'0') + '/' + selectedDate.month.toString().padLeft(2,'0') + '/' + selectedDate.year.toString()),
+                    label: Text('${selectedDate.day.toString().padLeft(2,'0')}/${selectedDate.month.toString().padLeft(2,'0')}/${selectedDate.year}'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black87,

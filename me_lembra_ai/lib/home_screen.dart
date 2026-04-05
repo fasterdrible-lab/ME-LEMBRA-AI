@@ -47,9 +47,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _carregarData() {
     final now = DateTime.now();
-    const dias = ['Segunda-feira','Terca-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sabado','Domingo'];
-    const meses = ['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-    setState(() => _dataFormatada = dias[now.weekday - 1] + ', ' + now.day.toString() + ' de ' + meses[now.month - 1]);
+    const dias = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
+    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    setState(() => _dataFormatada = '${dias[now.weekday - 1]}, ${now.day} de ${meses[now.month - 1]}');
   }
 
   Future<void> _carregarLembretes() async {
@@ -100,35 +100,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (parts.length < 2) return '';
     final tipo = parts[0];
     final desc = parts.length > 2 ? parts[2] : '';
-    if (desc.isNotEmpty) return tipo + ' \u00B7 ' + desc;
+    if (desc.isNotEmpty) return '$tipo · $desc';
     return tipo;
   }
 
   String _getHora(String raw) {
     final parts = raw.split('|');
     return parts.length > 4 ? parts[4] : '';
-  }
-
-  void _mostrarSOS() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Botao de Panico', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Deseja enviar um alerta de emergencia para seus contatos?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE53935),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Enviar SOS'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildHome() {
@@ -238,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black12)],
+        boxShadow: [const BoxShadow(blurRadius: 6, color: Colors.black12)],
       ),
       child: Row(
         children: [
@@ -268,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(color: const Color(0xFF7B5EA7), borderRadius: BorderRadius.circular(6)),
-                  child: const Text('HOJ', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  child: const Text('HOJE', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
             ],
           ),
