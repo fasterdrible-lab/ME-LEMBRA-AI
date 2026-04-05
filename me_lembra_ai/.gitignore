@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Firebase config — must NOT be committed
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
 # Local scripts / backups (do not commit)
 fix*.py
 write_*.py

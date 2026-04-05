@@ -27,8 +27,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _carregarPerfil() async {
-    final perfil = await ProfileService.getProfile();
-    setState(() => _perfil = perfil ?? 'Voce');
+    final prefs = await SharedPreferences.getInstance();
+    final userName = prefs.getString('user_name');
+    if (userName != null && userName.isNotEmpty) {
+      setState(() => _perfil = userName);
+    } else {
+      final perfil = await ProfileService.getProfile();
+      setState(() => _perfil = perfil ?? '');
+    }
+  }
+
+  String _getSaudacao() {
+    final hora = DateTime.now().hour;
+    final String saudacao;
+    if (hora < 12) {
+      saudacao = 'Bom dia';
+    } else if (hora < 18) {
+      saudacao = 'Boa tarde';
+    } else {
+      saudacao = 'Boa noite';
+    }
+    if (_perfil.isNotEmpty) {
+      return '$saudacao, $_perfil!';
+    }
+    return '$saudacao!';
   }
 
   void _carregarData() {
@@ -95,6 +117,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return parts.length > 4 ? parts[4] : '';
   }
 
+  void _mostrarNotificacoes() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Notificacoes', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Nenhuma notificacao no momento.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar')),
+        ],
+      ),
+    );
+  }
+
   void _mostrarSOS() {
     showDialog(
       context: context,
@@ -124,10 +160,9 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 50, 20, 28),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF7B5EA7), Color(0xFF5B4FCF)],
+                colors: [Color(0xFF1565C0), Color(0xFF1E88E5)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -136,33 +171,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 bottomRight: Radius.circular(28),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Bom dia, ' + _perfil + '! 👋',
-                  style: const TextStyle(color: Colors.white70, fontSize: 16),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 8, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getSaudacao(),
+                                style: const TextStyle(color: Colors.white70, fontSize: 16),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text('Me Lembra Ai',
+                                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 28),
+                          onPressed: _mostrarNotificacoes,
+                          tooltip: 'Notificacoes',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.calendar_today, color: Colors.white, size: 14),
+                          const SizedBox(width: 6),
+                          Text(_dataFormatada, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                const Text('Me Lembra Ai',
-                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.calendar_today, color: Colors.white, size: 14),
-                      const SizedBox(width: 6),
-                      Text(_dataFormatada, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           Padding(
@@ -173,7 +232,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Flexible(
+                      child: Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
                     TextButton(
                       onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
                       child: const Text('Ver todos', style: TextStyle(color: Color(0xFF7B5EA7))),
@@ -285,22 +346,28 @@ class _HomeScreenState extends State<HomeScreen> {
             _carregarLembretes();
           }
         },
-        backgroundColor: const Color(0xFF7B5EA7),
+        backgroundColor: const Color(0xFF1565C0),
         child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _abaAtual == 3 ? 3 : _abaAtual,
-        onTap: (i) => setState(() => _abaAtual = i),
+        onTap: (i) {
+          setState(() => _abaAtual = i);
+          if (i == 0) {
+            _carregarPerfil();
+            _carregarLembretes();
+          }
+        },
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF7B5EA7),
+        selectedItemColor: const Color(0xFF1565C0),
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
         elevation: 12,
         items: const [
-BottomNavigationBarItem(icon: Text('🏠', style: TextStyle(fontSize: 22)), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Text('📂', style: TextStyle(fontSize: 22)), label: 'Categorias'),
-          BottomNavigationBarItem(icon: Text('➕', style: TextStyle(fontSize: 22)), label: 'Adicionar'),
-          BottomNavigationBarItem(icon: Text('⚙', style: TextStyle(fontSize: 22)), label: 'Config'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Icon(Icons.folder_outlined), activeIcon: Icon(Icons.folder), label: 'Categorias'),
+          BottomNavigationBarItem(icon: Icon(Icons.add_circle_outline), activeIcon: Icon(Icons.add_circle), label: 'Adicionar'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), activeIcon: Icon(Icons.settings), label: 'Config'),
         ],
       ),
     );
