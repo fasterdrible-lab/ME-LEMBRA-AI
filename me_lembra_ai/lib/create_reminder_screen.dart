@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'services/reminder_service.dart';
 import 'services/profile_service.dart';
+import 'services/notification_service.dart';
 import 'models/reminder.dart';
 
 class CreateReminderScreen extends StatefulWidget {
@@ -60,6 +61,12 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
       );
 
       await ReminderService.add(reminder);
+      await NotificationService.scheduleReminder(
+        id: reminder.title.hashCode ^ reminder.dateTime.millisecondsSinceEpoch,
+        title: _getNotificationTitle(tipo),
+        body: titulo,
+        scheduledDate: dateTime,
+      );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -69,6 +76,18 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
       }
     } finally {
       if (mounted) setState(() => _salvando = false);
+    }
+  }
+
+  String _getNotificationTitle(String tipo) {
+    switch (tipo) {
+      case 'Remedio': return '💊 Hora do remédio!';
+      case 'Consulta': return '🩺 Você tem uma consulta!';
+      case 'Aniversario': return '🎂 Aniversário hoje!';
+      case 'Mercado': return '🛒 Lista de compras';
+      case 'Reuniao': return '🤝 Você tem uma reunião!';
+      case 'Tomar': return '💧 Hora de tomar água!';
+      default: return '🔔 Lembrete!';
     }
   }
 
