@@ -11,7 +11,7 @@ class ProfileSelectionScreen extends StatelessWidget {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => const HomeScreen(),
+        builder: (_) => HomeScreen(),
       ),
     );
   }
@@ -112,10 +112,10 @@ class ProfileSelectionScreen extends StatelessWidget {
                   children: [
                     _cardPerfil(
                       context,
-                      "Vovô / Vovó",
+                      "Vovo / Vova",
                       "assets/images/avos.png",
                       const Color(0xFF4A90D9),
-                      "Interface acessível com alertas por voz e SOS",
+                      "Interface acessivel com alertas por voz e SOS",
                     ),
                     _cardPerfil(
                       context,
@@ -126,10 +126,10 @@ class ProfileSelectionScreen extends StatelessWidget {
                     ),
                     _cardPerfil(
                       context,
-                      "Criança",
+                      "Crianca",
                       "assets/images/crianca.png",
                       const Color(0xFFFF8C00),
-                      "Monitorado por responsável com localização",
+                      "Monitorado por responsavel com localizacao",
                     ),
                   ],
                 ),
