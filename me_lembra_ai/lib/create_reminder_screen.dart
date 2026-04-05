@@ -38,7 +38,12 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
 
     setState(() => _salvando = true);
     try {
-      final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      // Login anônimo automático se não autenticado
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
+
+      final userId = FirebaseAuth.instance.currentUser!.uid;
       final perfil = await ProfileService.getProfile() ?? '';
       final dateTime = DateTime(
         selectedDate.year,
@@ -71,7 +76,11 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao salvar lembrete. Verifique sua conexão.')),
+          SnackBar(
+            content: Text('Erro: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 8),
+          ),
         );
       }
     } finally {
