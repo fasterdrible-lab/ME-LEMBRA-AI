@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,7 @@ void main() async {
   } catch (_) {
     // Firebase já inicializado pelo google-services.json nativo
   }
+  await NotificationService.init();
   runApp(const MeLembraApp());
 }
 

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/reminder.dart';
+import 'notification_service.dart';
 
 class ReminderService {
   static final _db = FirebaseFirestore.instance;
@@ -33,8 +34,11 @@ class ReminderService {
   }
 
   // Deletar
-  static Future<void> delete(String id) async {
+  static Future<void> delete(String id, {int? notificationId}) async {
     if (_userId == null) return;
+    if (notificationId != null) {
+      await NotificationService.cancel(notificationId);
+    }
     await _col.doc(id).delete();
   }
 
