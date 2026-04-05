@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _carregarPerfil() async {
     final perfil = await ProfileService.getProfile();
-    setState(() => _perfil = perfil ?? 'Andre');
+    setState(() => _perfil = perfil ?? 'Voce');
   }
 
   void _carregarData() {
@@ -44,15 +44,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _getEmoji(String raw) {
+    final remedio = '💊';
+    final consulta = '🩺';
+    final aniversario = '🎂';
+    final mercado = '🛒';
+    final reuniao = '🤝';
+    final tomar = '💧';
+    final padrao = '🔔';
     final tipo = raw.split('|').first;
     switch (tipo) {
-      case 'Remedio': return '💊';
-      case 'Consulta': return '🩺';
-      case 'Aniversario': return '🎂';
-      case 'Mercado': return '🛒';
-      case 'Reuniao': return '🤝';
-      case 'Tomar': return '💧';
-      default: return '🔔';
+      case 'Remedio': return remedio;
+      case 'Consulta': return consulta;
+      case 'Aniversario': return aniversario;
+      case 'Mercado': return mercado;
+      case 'Reuniao': return reuniao;
+      case 'Tomar': return tomar;
+      default: return padrao;
+    }
+  }
+
+  Color _getIconeCor(String raw) {
+    final tipo = raw.split('|').first;
+    switch (tipo) {
+      case 'Remedio': return const Color(0xFFFFEEEE);
+      case 'Consulta': return const Color(0xFFEEF4FF);
+      case 'Aniversario': return const Color(0xFFFFF3E0);
+      case 'Mercado': return const Color(0xFFE8F5E9);
+      case 'Reuniao': return const Color(0xFFEDE7F6);
+      case 'Tomar': return const Color(0xFFE3F2FD);
+      default: return const Color(0xFFF2F2F7);
     }
   }
 
@@ -66,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (parts.length < 2) return '';
     final tipo = parts[0];
     final desc = parts.length > 2 ? parts[2] : '';
-    if (desc.isNotEmpty) return tipo + ' · ' + desc;
+    if (desc.isNotEmpty) return tipo + ' \u00B7 ' + desc;
     return tipo;
   }
 
@@ -80,14 +100,11 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Text('🆘', style: TextStyle(fontSize: 28)),
-          SizedBox(width: 10),
-          Text('Botao de Panico', style: TextStyle(fontWeight: FontWeight.bold)),
-        ]),
+        title: const Text('Botao de Panico', style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text('Deseja enviar um alerta de emergencia para seus contatos?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),\n          ElevatedButton(
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFE53935),
               foregroundColor: Colors.white,
@@ -122,43 +139,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Bom dia, ' + _perfil + '! 👋',
-                      style: const TextStyle(color: Colors.white70, fontSize: 16),
-                    ),
-                    Row(children: [
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text('💬', style: TextStyle(fontSize: 18)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _mostrarSOS,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE53935),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text('🆘', style: TextStyle(fontSize: 18)),
-                        ),
-                      ),
-                    ]),
-                  ],
+                Text('Bom dia, ' + _perfil + '! 👋',
+                  style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Me Lembra Ai',
+                const Text('Me Lembra Ai',
                   style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
@@ -190,9 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     TextButton(
-                      onPressed: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => const RemindersScreen())),
-                      child: const Text('Ver todos ->', style: TextStyle(color: Color(0xFF7B5EA7))),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
+                      child: const Text('Ver todos', style: TextStyle(color: Color(0xFF7B5EA7))),
                     ),
                   ],
                 ),
@@ -201,14 +185,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Center(
-                          child: Text(
-                            'Nenhum lembrete.
-Toque em Adicionar!',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.black45),
-                          ),
-                        ),
+                        child: const Center(child: Text('Nenhum lembrete. Toque em Adicionar!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.black45))),
                       )
                     : Column(children: _lembretes.take(3).map((l) => _lembreteCard(l)).toList()),
                 const SizedBox(height: 24),
@@ -219,11 +198,9 @@ Toque em Adicionar!',
                     : Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Center(
-                          child: Text('Nenhum lembrete em breve.', style: TextStyle(color: Colors.black45)),
-                        ),
+                        child: const Center(child: Text('Nenhum lembrete em breve.', style: TextStyle(color: Colors.black45))),
                       ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 80),
               ],
             ),
           ),
@@ -236,6 +213,7 @@ Toque em Adicionar!',
     final titulo = _getTitulo(raw);
     final subtitulo = _getSubtitulo(raw);
     final emoji = _getEmoji(raw);
+    final cor = _getIconeCor(raw);
     final hora = _getHora(raw);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -249,7 +227,7 @@ Toque em Adicionar!',
         children: [
           Container(
             width: 44, height: 44,
-            decoration: BoxDecoration(color: const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: cor, borderRadius: BorderRadius.circular(12)),
             child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
           ),
           const SizedBox(width: 12),
@@ -266,15 +244,13 @@ Toque em Adicionar!',
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                hora.isNotEmpty ? hora : 'Hoje',
-                style: const TextStyle(color: Color(0xFF7B5EA7), fontWeight: FontWeight.w600, fontSize: 13),
-              ),
+              Text(hora.isNotEmpty ? hora : 'Hoje',
+                style: const TextStyle(color: Color(0xFF7B5EA7), fontWeight: FontWeight.w600, fontSize: 13)),
               if (hora.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: const Color(0xFFE53935), borderRadius: BorderRadius.circular(6)),
+                  decoration: BoxDecoration(color: const Color(0xFF7B5EA7), borderRadius: BorderRadius.circular(6)),
                   child: const Text('HOJ', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
             ],
@@ -292,39 +268,39 @@ Toque em Adicionar!',
       const SizedBox(),
       const ConfigScreen(),
     ];
-
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       body: telas[_abaAtual],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _abaAtual,
-        onTap: (i) async {
-          if (i == 2) {
-            final resultado = await Navigator.push<String>(
-              context,
-              MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
-            );
-            if (resultado != null && resultado.isNotEmpty) {
-              final prefs = await SharedPreferences.getInstance();
-              final lista = prefs.getStringList('lembretes') ?? [];
-              lista.add(resultado);
-              await prefs.setStringList('lembretes', lista);
-              _carregarLembretes();
-            }
-          } else {
-            setState(() => _abaAtual = i > 2 ? i - 1 : i);
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final resultado = await Navigator.push<String>(
+            context,
+            MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
+          );
+          if (resultado != null && resultado.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            final lista = prefs.getStringList('lembretes') ?? [];
+            lista.add(resultado);
+            await prefs.setStringList('lembretes', lista);
+            _carregarLembretes();
           }
         },
+        backgroundColor: const Color(0xFF7B5EA7),
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _abaAtual == 3 ? 3 : _abaAtual,
+        onTap: (i) => setState(() => _abaAtual = i),
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF7B5EA7),
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
         elevation: 12,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.folder_rounded), label: 'Categorias'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_circle_rounded, size: 32), label: 'Adicionar'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Config'),
+BottomNavigationBarItem(icon: Text('🏠', style: TextStyle(fontSize: 22)), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Text('📂', style: TextStyle(fontSize: 22)), label: 'Categorias'),
+          BottomNavigationBarItem(icon: Text('➕', style: TextStyle(fontSize: 22)), label: 'Adicionar'),
+          BottomNavigationBarItem(icon: Text('⚙', style: TextStyle(fontSize: 22)), label: 'Config'),
         ],
       ),
     );
