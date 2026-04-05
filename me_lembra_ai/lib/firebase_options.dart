@@ -45,7 +45,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAqSnE4HWAyMigWCuGuPMEwCXE1oZmmL1o',
-    appId: '1:1029231065071:android:melembra',
+    appId: '1:1029231065071:android:e3e10d91aeda4951b8a81a',
     messagingSenderId: '1029231065071',
     projectId: 'me-lembra-ai-bf0f0',
     storageBucket: 'me-lembra-ai-bf0f0.firebasestorage.app',
@@ -53,7 +53,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAqSnE4HWAyMigWCuGuPMEwCXE1oZmmL1o',
-    appId: '1:1029231065071:ios:melembra',
+    appId: '1:1029231065071:ios:a243c827828118ceb8a81a',
     messagingSenderId: '1029231065071',
     projectId: 'me-lembra-ai-bf0f0',
     storageBucket: 'me-lembra-ai-bf0f0.firebasestorage.app',
@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAqSnE4HWAyMigWCuGuPMEwCXE1oZmmL1o',
-    appId: '1:1029231065071:ios:melembra',
+    appId: '1:1029231065071:ios:a243c827828118ceb8a81a',
     messagingSenderId: '1029231065071',
     projectId: 'me-lembra-ai-bf0f0',
     storageBucket: 'me-lembra-ai-bf0f0.firebasestorage.app',
