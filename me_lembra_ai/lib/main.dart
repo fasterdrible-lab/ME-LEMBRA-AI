@@ -7,10 +7,12 @@ import 'home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Firebase.apps.isEmpty) {
+  try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+  } catch (_) {
+    // Firebase já inicializado pelo google-services.json nativo
   }
   runApp(const MeLembraApp());
 }
