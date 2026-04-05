@@ -1,15 +1,56 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Reminder {
-  String title;
-  String type;
-  DateTime dateTime;
-  String repeat;
-  String notification;
+  final String id;
+  final String userId;
+  final String title;
+  final String type;
+  final String description;
+  final DateTime dateTime;
+  final String repeat; // 'unico', 'diario', 'semanal'
+  final String notification;
+  final bool confirmed;
+  final String perfil; // 'Vovô / Vovó', 'Adulto', 'Filhos'
 
   Reminder({
+    required this.id,
+    required this.userId,
     required this.title,
     required this.type,
+    required this.description,
     required this.dateTime,
     required this.repeat,
     required this.notification,
+    this.confirmed = false,
+    required this.perfil,
   });
+
+  factory Reminder.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Reminder(
+      id: doc.id,
+      userId: data['userId'] ?? '',
+      title: data['title'] ?? '',
+      type: data['type'] ?? '',
+      description: data['description'] ?? '',
+      dateTime: (data['dateTime'] as Timestamp).toDate(),
+      repeat: data['repeat'] ?? 'unico',
+      notification: data['notification'] ?? '',
+      confirmed: data['confirmed'] ?? false,
+      perfil: data['perfil'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'userId': userId,
+        'title': title,
+        'type': type,
+        'description': description,
+        'dateTime': Timestamp.fromDate(dateTime),
+        'repeat': repeat,
+        'notification': notification,
+        'confirmed': confirmed,
+        'perfil': perfil,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
 }

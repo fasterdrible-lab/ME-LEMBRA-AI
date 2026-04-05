@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'services/reminder_service.dart';
+import 'services/profile_service.dart';
+import 'models/reminder.dart';
 
 class CreateReminderScreen extends StatefulWidget {
   const CreateReminderScreen({super.key});
@@ -15,6 +19,7 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
   String tipo = 'Remedio';
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
+  bool _salvando = false;
 
   final List<Map<String, String>> tipos = [
     {'label': 'Remedio',     'emoji': '💊'},
@@ -25,13 +30,46 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
     {'label': 'Tomar',       'emoji': '💧'},
   ];
 
-  void _salvar() {
+  Future<void> _salvar() async {
     final titulo = _tituloController.text.trim();
     final desc = _descController.text.trim();
     if (titulo.isEmpty) return;
-    final hora = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
-    final resultado = '$tipo|$titulo|$desc|unico|$hora';
-    Navigator.pop(context, resultado);
+
+    setState(() => _salvando = true);
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final perfil = await ProfileService.getProfile() ?? '';
+      final dateTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+
+      final reminder = Reminder(
+        id: '',
+        userId: userId,
+        title: titulo,
+        type: tipo,
+        description: desc,
+        dateTime: dateTime,
+        repeat: 'unico',
+        notification: '',
+        perfil: perfil,
+      );
+
+      await ReminderService.add(reminder);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao salvar lembrete. Verifique sua conexão.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -163,16 +201,22 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _salvar,
+                onPressed: _salvando ? null : _salvar,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7B5EA7),
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 55),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text('SALVAR LEMBRETE',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
+                child: _salvando
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('SALVAR LEMBRETE',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
               ),
             ),
             const SizedBox(height: 20),

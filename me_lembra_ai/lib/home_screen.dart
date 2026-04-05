@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/profile_service.dart';
+import 'services/reminder_service.dart';
+import 'models/reminder.dart';
 import 'create_reminder_screen.dart';
 import 'reminders_screen.dart';
 import 'categories_screen.dart';
@@ -16,7 +18,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String _perfil = '';
   String _nomeUsuario = '';
   String _dataFormatada = '';
-  List<String> _lembretes = [];
   int _abaAtual = 0;
 
   @override
@@ -25,12 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _carregarPerfil();
     _carregarNome();
     _carregarData();
-    _carregarLembretes();
+    _migrarSharedPreferencesSeNecessario();
   }
 
   Future<void> _carregarPerfil() async {
     final perfil = await ProfileService.getProfile();
-    setState(() => _perfil = perfil ?? 'Voce');
+    if (mounted) setState(() => _perfil = perfil ?? 'Voce');
   }
 
   Future<void> _carregarNome() async {
@@ -52,33 +53,29 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _dataFormatada = '${dias[now.weekday - 1]}, ${now.day} de ${meses[now.month - 1]}');
   }
 
-  Future<void> _carregarLembretes() async {
+  Future<void> _migrarSharedPreferencesSeNecessario() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() => _lembretes = prefs.getStringList('lembretes') ?? []);
-  }
-
-  String _getEmoji(String raw) {
-    final remedio = '💊';
-    final consulta = '🩺';
-    final aniversario = '🎂';
-    final mercado = '🛒';
-    final reuniao = '🤝';
-    final tomar = '💧';
-    final padrao = '🔔';
-    final tipo = raw.split('|').first;
-    switch (tipo) {
-      case 'Remedio': return remedio;
-      case 'Consulta': return consulta;
-      case 'Aniversario': return aniversario;
-      case 'Mercado': return mercado;
-      case 'Reuniao': return reuniao;
-      case 'Tomar': return tomar;
-      default: return padrao;
+    final lista = prefs.getStringList('lembretes');
+    if (lista != null && lista.isNotEmpty) {
+      final perfil = await ProfileService.getProfile() ?? '';
+      await ReminderService.migrarSharedPreferences(lista, perfil);
+      await prefs.remove('lembretes');
     }
   }
 
-  Color _getIconeCor(String raw) {
-    final tipo = raw.split('|').first;
+  String _getEmoji(String tipo) {
+    switch (tipo) {
+      case 'Remedio': return '💊';
+      case 'Consulta': return '🩺';
+      case 'Aniversario': return '🎂';
+      case 'Mercado': return '🛒';
+      case 'Reuniao': return '🤝';
+      case 'Tomar': return '💧';
+      default: return '🔔';
+    }
+  }
+
+  Color _getIconeCor(String tipo) {
     switch (tipo) {
       case 'Remedio': return const Color(0xFFFFEEEE);
       case 'Consulta': return const Color(0xFFEEF4FF);
@@ -88,25 +85,6 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Tomar': return const Color(0xFFE3F2FD);
       default: return const Color(0xFFF2F2F7);
     }
-  }
-
-  String _getTitulo(String raw) {
-    final parts = raw.split('|');
-    return parts.length > 1 ? parts[1] : raw;
-  }
-
-  String _getSubtitulo(String raw) {
-    final parts = raw.split('|');
-    if (parts.length < 2) return '';
-    final tipo = parts[0];
-    final desc = parts.length > 2 ? parts[2] : '';
-    if (desc.isNotEmpty) return '$tipo · $desc';
-    return tipo;
-  }
-
-  String _getHora(String raw) {
-    final parts = raw.split('|');
-    return parts.length > 4 ? parts[4] : '';
   }
 
   Widget _buildHome() {
@@ -162,41 +140,56 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: StreamBuilder<List<Reminder>>(
+              stream: ReminderService.stream(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                    child: const Center(child: Text('Erro ao carregar lembretes.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black45))),
+                  );
+                }
+                final lembretes = snapshot.data ?? [];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    TextButton(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
-                      child: const Text('Ver todos', style: TextStyle(color: Color(0xFF7B5EA7))),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        TextButton(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
+                          child: const Text('Ver todos', style: TextStyle(color: Color(0xFF7B5EA7))),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 8),
+                    lembretes.isEmpty
+                        ? Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                            child: const Center(child: Text('Nenhum lembrete. Toque em Adicionar!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.black45))),
+                          )
+                        : Column(children: lembretes.take(3).map((l) => _lembreteCard(l)).toList()),
+                    const SizedBox(height: 24),
+                    const Text('Em breve', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    lembretes.length > 3
+                        ? Column(children: lembretes.skip(3).map((l) => _lembreteCard(l)).toList())
+                        : Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                            child: const Center(child: Text('Nenhum lembrete em breve.', style: TextStyle(color: Colors.black45))),
+                          ),
+                    const SizedBox(height: 80),
                   ],
-                ),
-                const SizedBox(height: 8),
-                _lembretes.isEmpty
-                    ? Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Center(child: Text('Nenhum lembrete. Toque em Adicionar!',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.black45))),
-                      )
-                    : Column(children: _lembretes.take(3).map((l) => _lembreteCard(l)).toList()),
-                const SizedBox(height: 24),
-                const Text('Em breve', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                _lembretes.length > 3
-                    ? Column(children: _lembretes.skip(3).map((l) => _lembreteCard(l)).toList())
-                    : Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                        child: const Center(child: Text('Nenhum lembrete em breve.', style: TextStyle(color: Colors.black45))),
-                      ),
-                const SizedBox(height: 80),
-              ],
+                );
+              },
             ),
           ),
         ],
@@ -204,12 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _lembreteCard(String raw) {
-    final titulo = _getTitulo(raw);
-    final subtitulo = _getSubtitulo(raw);
-    final emoji = _getEmoji(raw);
-    final cor = _getIconeCor(raw);
-    final hora = _getHora(raw);
+  Widget _lembreteCard(Reminder reminder) {
+    final emoji = _getEmoji(reminder.type);
+    final cor = _getIconeCor(reminder.type);
+    final hora = '${reminder.dateTime.hour.toString().padLeft(2, '0')}:${reminder.dateTime.minute.toString().padLeft(2, '0')}';
+    final subtitulo = reminder.description.isNotEmpty
+        ? '${reminder.type} · ${reminder.description}'
+        : reminder.type;
+    final now = DateTime.now();
+    final isToday = reminder.dateTime.year == now.year &&
+        reminder.dateTime.month == now.month &&
+        reminder.dateTime.day == now.day;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -230,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(titulo, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                Text(reminder.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 if (subtitulo.isNotEmpty)
                   Text(subtitulo, style: const TextStyle(color: Colors.black54, fontSize: 12)),
               ],
@@ -239,9 +237,9 @@ class _HomeScreenState extends State<HomeScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(hora.isNotEmpty ? hora : 'Hoje',
+              Text(hora,
                 style: const TextStyle(color: Color(0xFF7B5EA7), fontWeight: FontWeight.w600, fontSize: 13)),
-              if (hora.isNotEmpty)
+              if (isToday)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -270,17 +268,10 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _abaAtual == 3 ? 3 : _abaAtual,
         onTap: (i) async {
           if (i == 2) {
-            final resultado = await Navigator.push<String>(
+            await Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CreateReminderScreen()),
             );
-            if (resultado != null && resultado.isNotEmpty) {
-              final prefs = await SharedPreferences.getInstance();
-              final lista = prefs.getStringList('lembretes') ?? [];
-              lista.add(resultado);
-              await prefs.setStringList('lembretes', lista);
-              _carregarLembretes();
-            }
           } else {
             setState(() => _abaAtual = i);
           }
