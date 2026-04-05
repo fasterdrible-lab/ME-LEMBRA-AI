@@ -9,27 +9,29 @@ class CreateReminderScreen extends StatefulWidget {
 }
 
 class _CreateReminderScreenState extends State<CreateReminderScreen> {
-  final TextEditingController _controller = TextEditingController();
+  final TextEditingController _tituloController = TextEditingController();
+  final TextEditingController _descController = TextEditingController();
 
-  String tipo = "Remédio";
-
+  String tipo = 'Remedio';
   DateTime selectedDate = DateTime.now();
   TimeOfDay selectedTime = TimeOfDay.now();
 
-  final List<String> tipos = [
-    "Remédio",
-    "Consulta",
-    "Tarefa",
-    "Evento",
-    "Água"
+  final List<Map<String, String>> tipos = [
+    {'label': 'Remedio',     'emoji': '💊'},
+    {'label': 'Consulta',    'emoji': '🩺'},
+    {'label': 'Aniversario', 'emoji': '🎂'},
+    {'label': 'Mercado',     'emoji': '🛒'},
+    {'label': 'Reuniao',     'emoji': '🤝'},
+    {'label': 'Tomar',       'emoji': '💧'},
   ];
 
   void _salvar() {
-    final texto = _controller.text;
-
-    if (texto.isEmpty) return;
-
-    Navigator.pop(context, texto);
+    final titulo = _tituloController.text.trim();
+    final desc = _descController.text.trim();
+    if (titulo.isEmpty) return;
+    final hora = selectedTime.hour.toString().padLeft(2, '0') + ':' + selectedTime.minute.toString().padLeft(2, '0');
+    final resultado = tipo + '|' + titulo + '|' + desc + '|unico|' + hora;
+    Navigator.pop(context, resultado);
   }
 
   Future<void> _pickDate() async {
@@ -39,10 +41,7 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
-
-    if (date != null) {
-      setState(() => selectedDate = date);
-    }
+    if (date != null) setState(() => selectedDate = date);
   }
 
   Future<void> _pickTime() async {
@@ -50,35 +49,33 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
       context: context,
       initialTime: selectedTime,
     );
-
-    if (time != null) {
-      setState(() => selectedTime = time);
-    }
+    if (time != null) setState(() => selectedTime = time);
   }
 
-  Widget _chip(String label) {
-    final selecionado = label == tipo;
-
+  Widget _chip(Map<String, String> item) {
+    final selecionado = item['label'] == tipo;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          tipo = label;
-        });
-      },
+      onTap: () => setState(() => tipo = item['label']!),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         margin: const EdgeInsets.only(right: 8, bottom: 8),
         decoration: BoxDecoration(
-          color: selecionado ? Colors.deepPurple : Colors.white,
+          color: selecionado ? const Color(0xFF7B5EA7) : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: selecionado ? const Color(0xFF7B5EA7) : Colors.grey.shade300),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selecionado ? Colors.white : Colors.black87,
-            fontWeight: FontWeight.w600,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(item['emoji']!, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(item['label']!,
+              style: TextStyle(
+                color: selecionado ? Colors.white : Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -89,9 +86,9 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
-        title: const Text("Novo Lembrete"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        title: const Text('Novo Lembrete'),
+        backgroundColor: const Color(0xFF7B5EA7),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -99,23 +96,16 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            /// TIPO
-            const Text("Tipo", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
-            Wrap(
-              children: tipos.map((e) => _chip(e)).toList(),
-            ),
-
+            Wrap(children: tipos.map((e) => _chip(e)).toList()),
             const SizedBox(height: 16),
-
-            /// TITULO
-            const Text("Título"),
+            const Text('Titulo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             TextField(
-              controller: _controller,
+              controller: _tituloController,
               decoration: InputDecoration(
-                hintText: "Ex: Tomar remédio",
+                hintText: 'Ex: Losartana 50mg',
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -124,53 +114,68 @@ class _CreateReminderScreenState extends State<CreateReminderScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            /// DATA + HORA
-            const Text("Data e Hora"),
+            const Text('Descricao (opcional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _descController,
+              decoration: InputDecoration(
+                hintText: 'Ex: Todos os dias',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Data e Hora', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
+                  child: ElevatedButton.icon(
                     onPressed: _pickDate,
-                    child: Text(
-                      "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(selectedDate.day.toString().padLeft(2,'0') + '/' + selectedDate.month.toString().padLeft(2,'0') + '/' + selectedDate.year.toString()),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton(
+                  child: ElevatedButton.icon(
                     onPressed: _pickTime,
-                    child: Text(selectedTime.format(context)),
+                    icon: const Icon(Icons.access_time, size: 16),
+                    label: Text(selectedTime.format(context)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                    ),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 24),
-
-            /// BOTÃO
+            const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _salvar,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
+                  backgroundColor: const Color(0xFF7B5EA7),
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text(
-                  "SALVAR LEMBRETE",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                child: const Text('SALVAR LEMBRETE',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
