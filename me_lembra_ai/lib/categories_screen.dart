@@ -19,7 +19,7 @@ class CategoriesScreen extends StatelessWidget {
         final eventos = all.where((r) => r.type == 'Reuniao').length;
         final recorrentes = all.where((r) => r.repeat != 'unico').length;
 
-        String _label(int count, String singular) {
+        String _label(int count) {
           if (count == 0) return 'Nenhum';
           return '$count ativo(s)';
         }
@@ -43,10 +43,10 @@ class CategoriesScreen extends StatelessWidget {
                   mainAxisSpacing: 14,
                   childAspectRatio: 1.3,
                   children: [
-                    _catCard('Remedios', _label(remedios, 'ativo'), Icons.medication, const Color(0xFFFFEBEE), const Color(0xFFE57373)),
-                    _catCard('Consultas', _label(consultas, 'agendada'), Icons.local_hospital, const Color(0xFFE3F2FD), const Color(0xFF64B5F6)),
-                    _catCard('Mercado', _label(mercado, 'item'), Icons.shopping_cart, const Color(0xFFFFFDE7), const Color(0xFFFFD54F)),
-                    _catCard('Aniversarios', _label(aniversarios, 'este mês'), Icons.cake, const Color(0xFFFFF3E0), const Color(0xFFFFB74D)),
+                    _catCard('Remedios', _label(remedios), Icons.medication, const Color(0xFFFFEBEE), const Color(0xFFE57373)),
+                    _catCard('Consultas', _label(consultas), Icons.local_hospital, const Color(0xFFE3F2FD), const Color(0xFF64B5F6)),
+                    _catCard('Mercado', _label(mercado), Icons.shopping_cart, const Color(0xFFFFFDE7), const Color(0xFFFFD54F)),
+                    _catCard('Aniversarios', _label(aniversarios), Icons.cake, const Color(0xFFFFF3E0), const Color(0xFFFFB74D)),
                   ],
                 ),
                 const SizedBox(height: 14),
