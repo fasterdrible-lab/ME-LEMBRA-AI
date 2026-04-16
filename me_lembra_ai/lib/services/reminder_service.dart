@@ -48,6 +48,12 @@ class ReminderService {
     await _col.doc(id).update({'confirmed': true});
   }
 
+  // Atualizar lembrete existente
+  static Future<void> update(Reminder reminder) async {
+    if (_userId == null) return;
+    await _col.doc(reminder.id).update(reminder.toFirestore());
+  }
+
   // Migrar dados antigos do SharedPreferences para Firestore
   static Future<void> migrarSharedPreferences(
       List<String> rawList, String perfil) async {
