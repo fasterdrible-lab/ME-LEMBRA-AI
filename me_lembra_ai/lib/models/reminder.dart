@@ -53,4 +53,30 @@ class Reminder {
         'perfil': perfil,
         'createdAt': FieldValue.serverTimestamp(),
       };
+
+  Reminder copyWith({
+    String? id,
+    String? userId,
+    String? title,
+    String? type,
+    String? description,
+    DateTime? dateTime,
+    String? repeat,
+    String? notification,
+    bool? confirmed,
+    String? perfil,
+  }) {
+    return Reminder(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      title: title ?? this.title,
+      type: type ?? this.type,
+      description: description ?? this.description,
+      dateTime: dateTime ?? this.dateTime,
+      repeat: repeat ?? this.repeat,
+      notification: notification ?? this.notification,
+      confirmed: confirmed ?? this.confirmed,
+      perfil: perfil ?? this.perfil,
+    );
+  }
 }

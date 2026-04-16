@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'services/reminder_service.dart';
 import 'models/reminder.dart';
 import 'create_reminder_screen.dart';
+import 'edit_reminder_screen.dart';
 
 class RemindersScreen extends StatelessWidget {
   const RemindersScreen({super.key});
@@ -120,6 +121,16 @@ class RemindersScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EditReminderScreen(reminder: reminder),
+                                ),
+                              ),
+                              child: const Icon(Icons.edit_outlined, color: Color(0xFF7B5EA7), size: 20),
+                            ),
+                            const SizedBox(width: 6),
                             if (!reminder.confirmed)
                               GestureDetector(
                                 onTap: () => _confirmarLembrete(reminder.id),
