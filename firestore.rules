@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isFamilyOf(uid) {
+      // O cuidador é membro de users/{uid}/family/{cuidadorUid}
+      return isSignedIn() && exists(
+        /databases/$(database)/documents/users/$(uid)/family/$(request.auth.uid)
+      );
+    }
+
+    // Documento principal do usuário
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isFamilyOf(uid);
+      allow create, update: if isOwner(uid);
+      allow delete: if isOwner(uid);
+
+      // Lembretes — dono escreve, família apenas lê
+      match /reminders/{rid} {
+        allow read: if isOwner(uid) || isFamilyOf(uid);
+        allow write: if isOwner(uid);
+      }
+
+      // Vínculos da família — só o dono escreve no próprio nó
+      match /family/{otherUid} {
+        // O outro lado precisa criar/excluir o vínculo bilateral.
+        allow read: if isOwner(uid);
+        allow write: if isOwner(uid) || isOwner(otherUid);
+      }
+    }
+
+    // Convites: qualquer usuário autenticado pode buscar pelo código,
+    // só o dono pode criar/atualizar.
+    match /invites/{code} {
+      allow read: if isSignedIn();
+      allow create, update, delete:
+        if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Alertas SOS: dono cria/lê o seu, família lê o do monitorado.
+    match /sos_alerts/{alertId} {
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid
+        || isFamilyOf(resource.data.userId)
+      );
+      allow update, delete: if false;
+    }
+
+    // Chat 1-a-1: apenas os dois participantes do pairId podem acessar.
+    match /chats/{pairId}/messages/{msgId} {
+      function participates() {
+        return isSignedIn() && pairId.matches('.*' + request.auth.uid + '.*');
+      }
+      allow read: if participates();
+      allow create: if participates()
+        && request.resource.data.senderUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}
