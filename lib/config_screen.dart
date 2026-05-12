@@ -33,9 +33,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
   Future<void> _carregarVersao() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      if (mounted) setState(() => _versao = 'Versão ${info.version} (build ${info.buildNumber})');
+      if (mounted) setState(() => _versao = 'v${info.version}');
     } catch (_) {
-      if (mounted) setState(() => _versao = 'Versão 1.0.1');
+      if (mounted) setState(() => _versao = 'v1.2.0');
     }
   }
 
@@ -126,7 +126,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
           children: [
             const Text('Configuracoes', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('Personalize o app', style: TextStyle(color: Colors.black54)),
+            const Text('Personalize o app'),
             const SizedBox(height: 24),
             _secao('PERFIL'),
             _card(child: ListTile(
@@ -266,6 +266,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 );
                 if (confirmar == true) {
                   await FirebaseAuth.instance.signOut();
+                  if (mounted) {
+                    Navigator.of(context)
+                        .pushNamedAndRemoveUntil('/', (route) => false);
+                  }
                 }
               },
             )),
@@ -281,10 +285,15 @@ class _ConfigScreenState extends State<ConfigScreen> {
     child: Text(t, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF7B5EA7), letterSpacing: 1)),
   );
 
-  Widget _card({required Widget child}) => Container(
-    margin: const EdgeInsets.only(bottom: 4),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16),
-      boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black.withValues(alpha: 0.04))]),
-    child: child,
+  Widget _card({required Widget child}) => Builder(
+    builder: (ctx) => Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(ctx).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black.withValues(alpha: 0.04))],
+      ),
+      child: child,
+    ),
   );
 }

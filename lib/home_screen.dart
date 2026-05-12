@@ -9,6 +9,7 @@ import 'create_reminder_screen.dart';
 import 'reminders_screen.dart';
 import 'categories_screen.dart';
 import 'config_screen.dart';
+import 'features/vehicle/vehicle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -329,13 +330,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _buildHome(),
       const CategoriesScreen(),
       const SizedBox(),
+      const VehicleScreen(),
       const ConfigScreen(),
     ];
     return Scaffold(
       backgroundColor: const Color(0xFFF2F2F7),
       body: telas[_abaAtual],
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _abaAtual == 3 ? 3 : _abaAtual,
+        currentIndex: _abaAtual,
         onTap: (i) async {
           if (i == 2) {
             await Navigator.push(
@@ -352,9 +354,10 @@ class _HomeScreenState extends State<HomeScreen> {
         showUnselectedLabels: true,
         elevation: 12,
         items: const [
-BottomNavigationBarItem(icon: Text('🏠', style: TextStyle(fontSize: 22)), label: 'Inicio'),
+          BottomNavigationBarItem(icon: Text('🏠', style: TextStyle(fontSize: 22)), label: 'Inicio'),
           BottomNavigationBarItem(icon: Text('📂', style: TextStyle(fontSize: 22)), label: 'Categorias'),
           BottomNavigationBarItem(icon: Text('➕', style: TextStyle(fontSize: 22)), label: 'Adicionar'),
+          BottomNavigationBarItem(icon: Icon(Icons.directions_car), label: 'Veículos'),
           BottomNavigationBarItem(icon: Text('⚙', style: TextStyle(fontSize: 22)), label: 'Config'),
         ],
       ),
