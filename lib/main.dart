@@ -16,6 +16,7 @@ import 'features/onboarding/onboarding_screen.dart';
 import 'config_screen.dart';
 import 'history_screen.dart';
 import 'services/settings_service.dart';
+import 'features/vehicle/vehicle_screen.dart';
 
 bool _onboardingVisto = false;
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
@@ -65,6 +66,7 @@ class MeLembraApp extends StatelessWidget {
         '/elderly': (context) => const ElderlyScreen(),
         '/family': (context) => const FamilyScreen(),
         '/history': (context) => const HistoryScreen(),
+        '/vehicles': (context) => const VehicleScreen(),
         '/config': (context) => Scaffold(
               appBar: AppBar(
                 title: const Text('Configurações'),

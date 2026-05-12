@@ -6,6 +6,9 @@ import '../../services/profile_service.dart';
 import '../../services/reminder_service.dart';
 import '../../services/smart_suggestions_service.dart';
 import '../../history_screen.dart';
+import '../vehicle/vehicle_screen.dart';
+import '../../services/vehicle_service.dart';
+import '../../models/vehicle.dart';
 
 /// Tela do perfil Adulto: dashboard com agenda do dia e estatísticas.
 class AdultScreen extends StatefulWidget {
@@ -94,12 +97,81 @@ class _AdultScreenState extends State<AdultScreen> {
                   _emptyCard('Sem agendamentos futuros.')
                 else
                   ...futuros.take(5).map(_reminderTile),
+                const SizedBox(height: 22),
+                _vehicleCard(),
                 const SizedBox(height: 80),
               ],
             );
           },
         ),
       ),
+    );
+  }
+
+  Widget _vehicleCard() {
+    return StreamBuilder<List<Vehicle>>(
+      stream: VehicleService.stream(),
+      builder: (context, snap) {
+        final veiculos = snap.data ?? [];
+        final comAlerta = veiculos.where((v) => v.temAlerta).length;
+        return GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const VehicleScreen()),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: comAlerta > 0
+                  ? Border.all(color: Colors.orange[300]!)
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.directions_car, color: _primary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Meus Veículos',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text(
+                        veiculos.isEmpty
+                            ? 'Nenhum veículo cadastrado'
+                            : comAlerta > 0
+                                ? '$comAlerta veículo(s) precisam de atenção'
+                                : '${veiculos.length} veículo(s) em dia',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: comAlerta > 0
+                              ? Colors.orange[700]
+                              : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (comAlerta > 0)
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.orange[600])
+                else
+                  Icon(Icons.chevron_right, color: Colors.grey[400]),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
