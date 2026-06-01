@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+  <defs>
+    <!-- Main yellow gradient background -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFE040;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFB800;stop-opacity:1" />
+    </linearGradient>
+    <!-- Swoosh gradient -->
+    <linearGradient id="swooshGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF9500;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#FFD000;stop-opacity:0.9" />
+    </linearGradient>
+    <!-- Clock face -->
+    <radialGradient id="clockFace" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" style="stop-color:#ffffff" />
+      <stop offset="100%" style="stop-color:#e8f4ff" />
+    </radialGradient>
+    <!-- Clock body -->
+    <linearGradient id="clockBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5BB8FF" />
+      <stop offset="100%" style="stop-color:#1A7FD4" />
+    </linearGradient>
+    <!-- Drop shadow -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#00000033"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="2" dy="3" stdDeviation="4" flood-color="#00000044"/>
+    </filter>
+    <filter id="lightShadow">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#00000022"/>
+    </filter>
+  </defs>
+
+  <!-- ── App Icon Background ── -->
+  <rect x="10" y="10" width="480" height="480" rx="110" ry="110"
+        fill="url(#bgGrad)" stroke="#1a1a1a" stroke-width="10"/>
+
+  <!-- ── Swoosh arc at bottom ── -->
+  <path d="M 60 370 Q 180 310 250 340 Q 340 380 450 320"
+        fill="none" stroke="#FFB000" stroke-width="28" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 60 370 Q 180 310 250 340 Q 340 380 450 320"
+        fill="none" stroke="#FFD700" stroke-width="16" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Arrow tip on swoosh -->
+  <polygon points="440,308 465,328 442,340" fill="#FFA500" opacity="0.85"/>
+
+  <!-- ── SPARKLES ── -->
+  <!-- Top left sparkle -->
+  <g transform="translate(75, 95)">
+    <line x1="0" y1="-12" x2="0" y2="12" stroke="#FFFBE0" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="-12" y1="0" x2="12" y2="0" stroke="#FFFBE0" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="-8" y1="-8" x2="8" y2="8" stroke="#FFFBE0" stroke-width="2" stroke-linecap="round"/>
+    <line x1="8" y1="-8" x2="-8" y2="8" stroke="#FFFBE0" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <!-- Top right sparkle -->
+  <g transform="translate(410, 120)">
+    <line x1="0" y1="-10" x2="0" y2="10" stroke="#FFFBE0" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-10" y1="0" x2="10" y2="0" stroke="#FFFBE0" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-7" y1="-7" x2="7" y2="7" stroke="#FFFBE0" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="7" y1="-7" x2="-7" y2="7" stroke="#FFFBE0" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+  <!-- Small sparkle right -->
+  <g transform="translate(445, 240)">
+    <line x1="0" y1="-7" x2="0" y2="7" stroke="#FFFBE0" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="-7" y1="0" x2="7" y2="0" stroke="#FFFBE0" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+  <!-- Small sparkle left -->
+  <g transform="translate(48, 290)">
+    <line x1="0" y1="-6" x2="0" y2="6" stroke="#FFFBE0" stroke-width="2" stroke-linecap="round"/>
+    <line x1="-6" y1="0" x2="6" y2="0" stroke="#FFFBE0" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- ══ TEXT: ME LEMBRA AÍ ══ -->
+  <!-- ME -->
+  <text x="250" y="148" text-anchor="middle"
+        font-family="Arial Black, Arial, sans-serif"
+        font-weight="900" font-size="98"
+        fill="#1a1a1a" letter-spacing="-1">ME</text>
+  <!-- LEMBRA -->
+  <text x="250" y="238" text-anchor="middle"
+        font-family="Arial Black, Arial, sans-serif"
+        font-weight="900" font-size="86"
+        fill="#1a1a1a" letter-spacing="-1">LEMBRA</text>
+  <!-- AÍ -->
+  <text x="250" y="322" text-anchor="middle"
+        font-family="Arial Black, Arial, sans-serif"
+        font-weight="900" font-size="98"
+        fill="#1a1a1a" letter-spacing="-1">AÍ</text>
+
+  <!-- ══ PILL / CAPSULE (bottom left) ══ -->
+  <g transform="translate(78, 375) rotate(-30)" filter="url(#softShadow)">
+    <!-- Pill body white half -->
+    <rect x="-32" y="-14" width="32" height="28" rx="14" fill="white"/>
+    <!-- Pill body red half -->
+    <rect x="0" y="-14" width="32" height="28" rx="14" fill="#FF3B30"/>
+    <!-- Dividing line -->
+    <line x1="0" y1="-14" x2="0" y2="14" stroke="#e0e0e0" stroke-width="2"/>
+    <!-- Shine -->
+    <ellipse cx="-14" cy="-4" rx="8" ry="4" fill="white" opacity="0.45" transform="rotate(-15,-14,-4)"/>
+  </g>
+
+  <!-- ══ ALARM CLOCK (bottom center-left) ══ -->
+  <g transform="translate(175, 380)" filter="url(#softShadow)">
+    <!-- Clock legs -->
+    <line x1="-18" y1="32" x2="-26" y2="46" stroke="#1A7FD4" stroke-width="5" stroke-linecap="round"/>
+    <line x1="18" y1="32" x2="26" y2="46" stroke="#1A7FD4" stroke-width="5" stroke-linecap="round"/>
+    <!-- Left bell -->
+    <circle cx="-28" cy="-34" r="9" fill="#1A7FD4"/>
+    <circle cx="-28" cy="-34" r="6" fill="#5BB8FF"/>
+    <!-- Right bell -->
+    <circle cx="28" cy="-34" r="9" fill="#1A7FD4"/>
+    <circle cx="28" cy="-34" r="6" fill="#5BB8FF"/>
+    <!-- Clock outer ring -->
+    <circle cx="0" cy="0" r="40" fill="url(#clockBody)"/>
+    <circle cx="0" cy="0" r="36" fill="url(#clockFace)"/>
+    <!-- Tick marks -->
+    <line x1="0" y1="-30" x2="0" y2="-24" stroke="#aaa" stroke-width="2.5"/>
+    <line x1="0" y1="30" x2="0" y2="24" stroke="#aaa" stroke-width="2.5"/>
+    <line x1="-30" y1="0" x2="-24" y2="0" stroke="#aaa" stroke-width="2.5"/>
+    <line x1="30" y1="0" x2="24" y2="0" stroke="#aaa" stroke-width="2.5"/>
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="4" fill="#333"/>
+    <!-- Hour hand -->
+    <line x1="0" y1="0" x2="-12" y2="-16" stroke="#1a1a1a" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- Minute hand (pointing to ~10) -->
+    <line x1="0" y1="0" x2="8" y2="-22" stroke="#FF3B30" stroke-width="3" stroke-linecap="round"/>
+    <!-- Shine on clock -->
+    <ellipse cx="-8" cy="-10" rx="10" ry="6" fill="white" opacity="0.3" transform="rotate(-20,-8,-10)"/>
+  </g>
+
+  <!-- ══ SMALL CHECK CARD (bottom center) ══ -->
+  <g transform="translate(280, 400) rotate(8)" filter="url(#softShadow)">
+    <rect x="-28" y="-22" width="56" height="46" rx="9" fill="white"/>
+    <!-- Green checkmark -->
+    <polyline points="-12,4 -3,14 18,-10"
+              fill="none" stroke="#34C759" stroke-width="6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ══ CALENDAR / CHECKLIST (bottom right) ══ -->
+  <g transform="translate(380, 370)" filter="url(#softShadow)">
+    <!-- Calendar body -->
+    <rect x="-36" y="-8" width="72" height="68" rx="10" fill="white"/>
+    <!-- Red header -->
+    <rect x="-36" y="-8" width="72" height="22" rx="10" fill="#FF3B30"/>
+    <rect x="-36" y="4" width="72" height="10" fill="#FF3B30"/>
+    <!-- Binding rings -->
+    <rect x="-16" y="-18" width="10" height="20" rx="5" fill="#555"/>
+    <rect x="6" y="-18" width="10" height="20" rx="5" fill="#555"/>
+    <!-- Red check in header -->
+    <polyline points="-8,2 -2,8 12,-6"
+              fill="none" stroke="white" stroke-width="3.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Green checklist lines -->
+    <line x1="-22" y1="26" x2="22" y2="26" stroke="#34C759" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="-22" y1="36" x2="14" y2="36" stroke="#34C759" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="-22" y1="46" x2="18" y2="46" stroke="#34C759" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- Check bullets -->
+    <polyline points="-30,24 -26,28 -20,20" fill="none" stroke="#34C759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="-30,34 -26,38 -20,30" fill="none" stroke="#34C759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="-30,44 -26,48 -20,40" fill="none" stroke="#34C759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+</svg>
