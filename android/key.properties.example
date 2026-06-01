@@ -1,0 +1,10 @@
+# Configuração de assinatura release
+# Copie este arquivo para `android/key.properties` (NÃO COMITAR) e preencha:
+# storeFile=C:/caminho/para/seu/keystore.jks
+# storePassword=...
+# keyAlias=upload
+# keyPassword=...
+storeFile=
+storePassword=
+keyAlias=
+keyPassword=
