@@ -36,6 +36,13 @@ flutter build apk --release
 
 APK gerado em: `build\app\outputs\flutter-apk\app-release.apk`
 
+Copiar para a pasta de versoes:
+
+```powershell
+Copy-Item "C:\MeLembraAI\build\app\outputs\flutter-apk\app-release.apk" `
+  "C:\Users\phpos\OneDrive\Área de Trabalho\VERSOES\me-lembra-ai-vX.X.X.apk" -Force
+```
+
 ---
 
 ## Stack

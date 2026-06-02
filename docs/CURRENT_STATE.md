@@ -9,10 +9,11 @@
 | Item | Valor |
 |---|---|
 | Versão do app | `1.3.0+6` |
-| APK atual | `me-lembra-ai-v1.3.0.apk` — ~64 MB |
+| APK atual | `me-lembra-ai-v1.3.0.apk` — 63.9 MB |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
+| Pasta de APKs | `C:\Users\phpos\OneDrive\Área de Trabalho\VERSÕES\` |
 
 ---
 
