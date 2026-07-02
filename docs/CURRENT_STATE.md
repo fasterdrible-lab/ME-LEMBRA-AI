@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — Me Lembra Aí
 
-> Última atualização: 2026-06-01 (sessão 12)
+> Última atualização: 2026-07-02 (sessão 13)
 
 ---
 
@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.3.0+6` |
-| APK atual | `me-lembra-ai-v1.3.0.apk` — 63.9 MB |
+| Versão do app | `1.3.1+7` |
+| APK atual | `me-lembra-ai-v1.3.1.apk` — 63.9 MB |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
@@ -231,6 +231,18 @@ Copy-Item "C:\MeLembraAI\build\app\outputs\flutter-apk\app-release.apk" `
 
 ---
 
+## Deploy das regras/índices do Firestore
+
+Alterações em `firestore.rules` ou `firestore.indexes.json` só valem em produção após:
+
+```powershell
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+> **Atenção:** sem isso, a query de `sos_alerts` (userId + orderBy createdAt) falha por falta de índice e o `markViewed` falha por permissão — mesmo com o código já corrigido localmente.
+
+---
+
 ## Deploy do sos_notifier.py no VPS
 
 ```bash
@@ -269,3 +281,4 @@ systemctl start sos-notifier
 | 10 | 2026-05-29 | SOS auto-call, canal `sos_alert` fullScreen, áudio long-press |
 | 11 | 2026-05-29 | Maps (GoogleMap), Foreground Service, SOS por volume, build v1.2.0 |
 | 12 | 2026-06-01 | Google Maps key; fix TTS + categoria Remédios; TASK-25 countdown SOS; TASK-27 múltiplos contatos; TASK-24 histórico SOS; TASK-26 SOS por toques; TASK-28 Veículos; manual do usuário; v1.3.0 |
+| 13 | 2026-07-02 | Fix bug: número SOS obsoleto voltava após limpar a lista (`settings_service.dart`); validação de número antes de discar; `firestore.indexes.json` (índice composto `sos_alerts`) + tratamento de erro de stream em `sos_history_screen.dart`/`monitor_screen.dart` (tela não trava mais em loop); regra do Firestore corrigida para permitir `markViewed` (campo `viewedBy`); chat: botão único mic/enviar (`chat_screen.dart`) em vez de dois botões ambíguos. **Pendente:** rodar `firebase deploy --only firestore:rules,firestore:indexes` em produção |

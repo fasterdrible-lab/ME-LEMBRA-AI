@@ -53,7 +53,12 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid
         || isFamilyOf(resource.data.userId)
       );
-      allow update, delete: if false;
+      // Só o familiar do monitorado pode marcar o alerta como visto,
+      // e só o campo viewedBy pode mudar.
+      allow update: if isSignedIn()
+        && isFamilyOf(resource.data.userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy']);
+      allow delete: if false;
     }
 
     // Chat 1-a-1: apenas os dois participantes do pairId podem acessar.

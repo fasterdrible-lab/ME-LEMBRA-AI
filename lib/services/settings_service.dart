@@ -32,9 +32,13 @@ class SettingsService {
 
   static Future<List<String>> getSosNumeros() async {
     final prefs = await SharedPreferences.getInstance();
-    final lista = prefs.getStringList(_kSosNumeros);
-    if (lista != null && lista.isNotEmpty) return lista;
-    // migração do campo antigo (single string)
+    // Uma vez que a lista nova foi salva (mesmo vazia), ela é a fonte da
+    // verdade — não voltar a usar o campo antigo, senão um número obsoleto
+    // reaparece sempre que o usuário limpa a lista atual.
+    if (prefs.containsKey(_kSosNumeros)) {
+      return prefs.getStringList(_kSosNumeros) ?? [];
+    }
+    // migração do campo antigo (single string), só antes da 1ª gravação nova
     final antigo = prefs.getString(_kSosNumero) ?? '';
     if (antigo.trim().isNotEmpty) return [antigo.trim()];
     return [];

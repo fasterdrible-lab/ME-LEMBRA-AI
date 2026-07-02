@@ -22,6 +22,18 @@ class SosHistoryScreen extends StatelessWidget {
       body: StreamBuilder<List<SosAlert>>(
         stream: SosFeedService.streamOwnAlerts(uid),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Não foi possível carregar os alertas.\n${snap.error}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+            );
+          }
           if (!snap.hasData) {
             return const Center(
                 child: CircularProgressIndicator(

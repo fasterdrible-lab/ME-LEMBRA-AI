@@ -32,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _durationTimer;
 
   String get _myUid => FirebaseAuth.instance.currentUser?.uid ?? '';
+  bool get _hasText => _ctrl.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -39,13 +40,17 @@ class _ChatScreenState extends State<ChatScreen> {
     _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _playingId = null);
     });
+    _ctrl.addListener(_onTextChanged);
   }
+
+  void _onTextChanged() => setState(() {});
 
   @override
   void dispose() {
     _durationTimer?.cancel();
     _recorder.dispose();
     _player.dispose();
+    _ctrl.removeListener(_onTextChanged);
     _ctrl.dispose();
     _scroll.dispose();
     super.dispose();
@@ -95,14 +100,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     });
     return true;
-  }
-
-  Future<void> _toggleRecord() async {
-    if (_isRecording) {
-      await _stopAndSend();
-      return;
-    }
-    await _startRecording();
   }
 
   Future<void> _stopAndSend() async {
@@ -223,39 +220,39 @@ class _ChatScreenState extends State<ChatScreen> {
                       onSubmitted: (_) => _send(),
                     ),
                   ),
-                  // Botão microfone: segurar para gravar, soltar para enviar.
-                  // Toque simples também funciona como toggle (fallback acessível).
-                  GestureDetector(
-                    onLongPressStart: (_) async {
-                      if (!_isUploading && !_isRecording) {
-                        await _startRecording();
-                      }
-                    },
-                    onLongPressEnd: (_) async {
-                      if (_isRecording) await _stopAndSend();
-                    },
-                    onTap: _isUploading ? null : _toggleRecord,
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _isRecording
-                            ? Colors.red.shade100
-                            : const Color(0xFFEDE7F6),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _isRecording ? Icons.stop_circle : Icons.mic,
-                        color: _isRecording ? Colors.red : const Color(0xFF7B5EA7),
-                        size: 26,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: Color(0xFF4A90D9)),
-                    onPressed: _isRecording ? null : _send,
-                  ),
+                  // Um único botão: microfone (segurar para gravar) quando o
+                  // campo está vazio, ou enviar quando há texto digitado —
+                  // evita dois botões de ação ambíguos lado a lado.
+                  _hasText
+                      ? IconButton(
+                          icon: const Icon(Icons.send, color: Color(0xFF4A90D9)),
+                          onPressed: _send,
+                        )
+                      : GestureDetector(
+                          onLongPressStart: (_) async {
+                            if (!_isUploading && !_isRecording) {
+                              await _startRecording();
+                            }
+                          },
+                          onLongPressEnd: (_) async {
+                            if (_isRecording) await _stopAndSend();
+                          },
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: _isRecording
+                                  ? Colors.red.shade100
+                                  : const Color(0xFFEDE7F6),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _isRecording ? Icons.stop_circle : Icons.mic,
+                              color: _isRecording ? Colors.red : const Color(0xFF7B5EA7),
+                              size: 26,
+                            ),
+                          ),
+                        ),
                 ],
               ),
             ),

@@ -82,7 +82,10 @@ class SosService {
   /// caso contrário abre o discador (ACTION_DIAL).
   static Future<void> callNumber(String numero) async {
     final clean = numero.replaceAll(RegExp(r'[^\d+]'), '');
-    if (clean.isEmpty) return;
+    // Número sem DDD/DDI (menos de 8 dígitos) é inválido para discagem —
+    // evita que o Android recuse a chamada com "número incorreto".
+    final digits = clean.replaceAll('+', '');
+    if (digits.length < 8) return;
 
     final status = await Permission.phone.request();
     if (status.isGranted) {

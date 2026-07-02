@@ -45,6 +45,14 @@ class _MonitorScreenState extends State<MonitorScreen> {
           StreamBuilder<List<SosAlert>>(
             stream: SosFeedService.streamForUsers([widget.member.uid]),
             builder: (context, snap) {
+              if (snap.hasError) {
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('Não foi possível carregar os alertas.\n${snap.error}'),
+                  ),
+                );
+              }
               if (!snap.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }

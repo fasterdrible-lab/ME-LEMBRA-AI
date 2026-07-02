@@ -286,6 +286,9 @@ Usuário pressiona volume 5× em ≤ 3 s (app em foreground):
 ### Chat de Áudio
 
 ```
+Botão único (mic ↔ enviar): mostra mic quando o campo está vazio,
+vira ícone de enviar assim que há texto digitado.
+
 Usuário segura botão de microfone:
   GestureDetector.onLongPressStart → _startRecording()
     ├─ recorder.hasPermission()
