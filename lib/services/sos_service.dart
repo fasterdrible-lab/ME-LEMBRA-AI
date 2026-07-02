@@ -21,6 +21,10 @@ class SosService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
 
+    // Toggle "Botão de Pânico (SOS)" desligado: não registra alerta,
+    // não avisa a família e não liga para o contato de emergência.
+    if (!await SettingsService.getSos()) return false;
+
     double? lat;
     double? lng;
     String? erroLocalizacao;

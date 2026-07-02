@@ -206,6 +206,18 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   }
 
   Future<void> _acionarSOS() async {
+    if (!await SettingsService.getSos()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('O Botão de Pânico (SOS) está desativado. '
+                'Ative em Configurações para usar o SOS.'),
+          ),
+        );
+      }
+      return;
+    }
+
     int contador = 5;
     Timer? timer;
     bool cancelado = false;
