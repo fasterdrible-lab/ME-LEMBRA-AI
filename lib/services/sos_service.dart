@@ -82,10 +82,11 @@ class SosService {
   /// caso contrário abre o discador (ACTION_DIAL).
   static Future<void> callNumber(String numero) async {
     final clean = numero.replaceAll(RegExp(r'[^\d+]'), '');
-    // Número sem DDD/DDI (menos de 8 dígitos) é inválido para discagem —
-    // evita que o Android recuse a chamada com "número incorreto".
+    // Número brasileiro válido tem no mínimo DDD (2) + telefone (8) = 10
+    // dígitos. Sem o DDD, tanto a ligação automática quanto uma rediscagem
+    // manual do mesmo número falham — por isso a validação aqui.
     final digits = clean.replaceAll('+', '');
-    if (digits.length < 8) return;
+    if (digits.length < 10) return;
 
     final status = await Permission.phone.request();
     if (status.isGranted) {

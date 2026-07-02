@@ -84,6 +84,16 @@ class _ConfigScreenState extends State<ConfigScreen> {
     await SettingsService.setSosNumeros(numeros);
   }
 
+  /// Um número de telefone brasileiro válido tem DDD + número
+  /// (10 ou 11 dígitos, ou 12-13 com código do país). Menos que isso
+  /// quase sempre significa que o DDD foi esquecido — a ligação falha
+  /// silenciosamente tanto pelo app quanto ao ser rediscada manualmente.
+  bool _numeroIncompleto(String texto) {
+    if (texto.trim().isEmpty) return false;
+    final digitos = texto.replaceAll(RegExp(r'[^\d]'), '');
+    return digitos.length < 10;
+  }
+
   void _aviso(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -271,37 +281,55 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     ..._sosCtrls.asMap().entries.map((e) {
                       final idx = e.key;
                       final ctrl = e.value;
+                      final incompleto = _numeroIncompleto(ctrl.text);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: ctrl,
-                                onChanged: (_) => _salvarNumeros(),
-                                decoration: InputDecoration(
-                                  hintText: idx == 0
-                                      ? 'Contato principal (ex: 11999999999)'
-                                      : 'Contato ${idx + 1} (ex: 11998888888)',
-                                  prefixIcon: const Icon(Icons.phone, color: Color(0xFFE53935)),
-                                  filled: true,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: ctrl,
+                                    onChanged: (_) {
+                                      _salvarNumeros();
+                                      setState(() {});
+                                    },
+                                    decoration: InputDecoration(
+                                      hintText: idx == 0
+                                          ? 'Contato principal (ex: 11999999999)'
+                                          : 'Contato ${idx + 1} (ex: 11998888888)',
+                                      prefixIcon: const Icon(Icons.phone, color: Color(0xFFE53935)),
+                                      filled: true,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    keyboardType: TextInputType.phone,
                                   ),
                                 ),
-                                keyboardType: TextInputType.phone,
-                              ),
+                                if (_sosCtrls.length > 1)
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, color: Color(0xFFE53935)),
+                                    tooltip: 'Remover',
+                                    onPressed: () {
+                                      _sosCtrls[idx].dispose();
+                                      setState(() => _sosCtrls.removeAt(idx));
+                                      _salvarNumeros();
+                                    },
+                                  ),
+                              ],
                             ),
-                            if (_sosCtrls.length > 1)
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline, color: Color(0xFFE53935)),
-                                tooltip: 'Remover',
-                                onPressed: () {
-                                  _sosCtrls[idx].dispose();
-                                  setState(() => _sosCtrls.removeAt(idx));
-                                  _salvarNumeros();
-                                },
+                            if (incompleto)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 12, top: 2),
+                                child: Text(
+                                  'Número incompleto — inclua o DDD (ex: 11999999999). '
+                                  'Sem o DDD a ligação de emergência falha.',
+                                  style: TextStyle(color: Color(0xFFE53935), fontSize: 12),
+                                ),
                               ),
                           ],
                         ),
