@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — Me Lembra Aí
 
-> Última atualização: 2026-07-02 (sessão 13)
+> Última atualização: 2026-07-03 (sessão 16)
 
 ---
 
@@ -170,6 +170,8 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 | Countdown 5 s antes de disparar SOS | Baixo | Não implementado |
 | Publicação na Play Store | Baixo | APK só em side-load |
 | VPS: reiniciar `sos-notifier.service` após novo `sos_notifier.py` | Operacional | Ver seção Deploy VPS |
+| **`sos_notifier.py` não está implantado na VPS de produção** | **Alto** | Descoberto na sessão 16: `/root/sos_notifier/` não existe em `204.168.180.25`, `systemctl status sos-notifier` não acha a unit. Push de SOS com app do familiar fechado provavelmente não funciona hoje, apesar de constar como concluído (sessão 5) — precisa de deploy real, seguindo os passos da seção "Deploy do sos_notifier.py no VPS" abaixo |
+| Clone Git órfão em `/root/ME-LEMBRA-AI` na VPS, com segredos em arquivos não commitados | Médio | Descoberto na sessão 16, não tocado — precisa de autorização explícita antes de limpar |
 ~~Ligação automática do SOS cancelada pela rede/operadora (SIP 487)~~ | ~~Médio~~ | ✅ Corrigido na sessão 13f — faltava o código do país (+55) no número discado |
 
 ---
@@ -257,57 +259,83 @@ usa a API da Groq (`llama-3.3-70b-versatile`, grátis até 30k tokens/min e
 por aqui — continua 100% local no app.
 
 **Domínio**: `api.melbrai.com.br` (já configurado em
-`AiCommandService._baseUrl`). Falta:
+`AiCommandService._baseUrl`).
 
-1. **DNS**: criar um registro A `api` → `204.168.180.25` no painel do
-   registrador do domínio `melbrai.com.br`. Propagação pode levar de minutos
-   a algumas horas.
-2. **Chave da Groq**: gerar uma **chave nova** no console da Groq
-   (https://console.groq.com/keys) — a que apareceu na conversa foi exposta e
-   deve ser revogada.
-3. **Deploy na VPS** (via SSH, `ssh root@204.168.180.25`) — **atenção**: essa
-   VPS é compartilhada com **vários outros projetos** do usuário (containers
-   Docker, nginx, uvicorn, mysql, postgres, redis, apps Node/Next), com
-   portas já ocupadas (8001, 8000, 8080, 6001, 6002, 3001, 3002, 4000, 4100,
-   3100, etc. — checar com `ss -tlnp` antes de escolher uma nova porta). O
-   backend de IA usa a porta **8091**. `/root/sos_notifier/`
-   documentado abaixo **não existe nela** (o serviço de push do SOS nunca foi
-   implantado aqui de fato — lacuna de produção anterior a esta sessão, sem
-   relação com o backend de IA). Por isso o `serviceAccountKey.json` é um
-   arquivo **novo**, baixado direto do Firebase Console, não reaproveitado:
-   ```bash
-   apt update && apt install -y nginx certbot python3-certbot-nginx
+### Status do deploy (sessão de 2026-07-03)
 
-   # copiar server/ai_command_server/ da máquina local para a VPS antes disto
-   # (scp -r server/ai_command_server root@204.168.180.25:/root/ai_command_server)
-   # copiar também o serviceAccountKey.json baixado do Firebase Console para
-   # /root/ai_command_server/serviceAccountKey.json
-   cd /root/ai_command_server
-   cp .env.example .env
-   nano .env   # colar a chave nova da Groq em GROQ_API_KEY
+| Etapa | Status |
+|---|---|
+| Código do backend copiado pra VPS (`/root/ai_command_server/`) | ✅ Feito |
+| `serviceAccountKey.json` do Firebase (Admin SDK, gerado em Contas de Serviço) | ✅ Feito |
+| `.env` com `GROQ_API_KEY` (chave nova, gerada após a exposição na conversa) | ✅ Feito |
+| venv Python + dependências (`requirements.txt`) | ✅ Feito |
+| Serviço systemd `melembra-ai-backend` ativo, porta **8091** | ✅ Feito — `curl http://127.0.0.1:8091/healthz` responde `{"status":"ok"}` |
+| nginx (proxy reverso `api.melbrai.com.br` → 8091) | ✅ Configurado (`nginx -t` a confirmar) |
+| DNS: registro A `api` → `204.168.180.25` | ⏳ Domínio `melbrai.com.br` migrando nameservers pra Cloudflare (~45 min de transição); registro A ainda não confirmado |
+| Certificado HTTPS (`certbot --nginx`) | ⏳ Bloqueado até o DNS propagar |
+| Teste de fora (`curl https://api.melbrai.com.br/healthz`) | ⏳ Pendente |
+| Rebuild do APK com o domínio real (já feito, v1.4.2) | ✅ Feito — só falta o backend responder de fato |
 
-   # Ubuntu 24.04 bloqueia "pip install" fora de venv (PEP 668)
-   python3 -m venv venv
-   venv/bin/pip install -r requirements.txt
+### Percalços encontrados durante o deploy (registrados pra não repetir)
 
-   cp melembra-ai-backend.service /etc/systemd/system/
-   systemctl daemon-reload
-   systemctl enable melembra-ai-backend
-   systemctl start melembra-ai-backend
-   curl http://127.0.0.1:8091/healthz   # deve responder {"status":"ok"}
+- **VPS compartilhada**: `204.168.180.25` não é dedicada ao Me Lembra Aí — tem
+  vários outros projetos do usuário (containers Docker, nginx próprio,
+  uvicorn, mysql, postgres, redis, apps Node/Next). Portas já ocupadas:
+  8001, 8000, 8080, 6001, 6002, 3001, 3002, 4000, 4100, 3100 — **sempre
+  checar com `ss -tlnp` antes de escolher uma porta nova**. O backend de IA
+  ficou na **8091** (a 8001, usada no plano original, já estava ocupada por
+  um container Docker de outro projeto).
+- **`sos_notifier.py` nunca foi implantado nessa VPS de verdade** —
+  `/root/sos_notifier/` não existe, `systemctl status sos-notifier` não
+  encontra a unit. Ou seja, o push de SOS quando o app do familiar está
+  fechado **provavelmente não funciona em produção hoje**, apesar de constar
+  como concluído no histórico (sessão 5). Lacuna pré-existente, descoberta
+  nesta sessão, sem relação com o backend de IA — precisa de investigação e
+  deploy separados (ver "Lacunas e limitações conhecidas").
+- **Ubuntu 24.04 bloqueia `pip install` fora de venv** (PEP 668) — o serviço
+  usa `python3 -m venv venv` + `venv/bin/pip`, e o `.service` aponta pro
+  gunicorn dentro do venv (`/root/ai_command_server/venv/bin/gunicorn`).
+- **Dois vazamentos de segredo na conversa durante o deploy**: (1) uma chave
+  da API da Groq colada em texto plano (revogada e substituída); (2) um
+  `GITHUB_TOKEN` que apareceu no conteúdo de um `/root/.env` criado sem
+  querer (por um `cp` que falhou seguido de `nano .env`, que criou um
+  arquivo novo vazio) — esse arquivo foi apagado (`rm -f /root/.env`), mas o
+  token em si precisa ser revogado no GitHub (Settings → Developer settings
+  → Personal access tokens) se ainda não foi.
+- **`google-services.json` ≠ `serviceAccountKey.json`**: são dois arquivos
+  diferentes do Firebase Console. O primeiro (aba "Geral" → "Seus apps") é a
+  config do app Android, pública por natureza. O segundo (aba "Contas de
+  serviço" → "Gerar nova chave privada") é a credencial de admin do
+  `firebase-admin` usada pelo backend — foi confundido duas vezes antes de
+  achar o certo.
+- **Clone Git órfão em `/root/ME-LEMBRA-AI`**: pasta antiga (abril/2026),
+  estrutura bem diferente do repositório atual, com **segredos em arquivos
+  não commitados** (`me_lembra_ai/.env`, `google-services.json`). Não foi
+  tocada nesta sessão — fica como item de limpeza separado, precisa de
+  autorização explícita do usuário antes de mexer (pode ter algo em uso).
 
-   cp nginx-api.conf /etc/nginx/sites-available/api.melbrai.com.br
-   ln -s /etc/nginx/sites-available/api.melbrai.com.br /etc/nginx/sites-enabled/
-   nginx -t && systemctl reload nginx
+### Comandos de deploy (referência, já executados na VPS)
 
-   # só depois do DNS já ter propagado:
-   certbot --nginx -d api.melbrai.com.br
+```bash
+# na VPS, depois de copiar server/ai_command_server/ e o serviceAccountKey.json
+cd /root/ai_command_server
+cp .env.example .env && nano .env   # GROQ_API_KEY=chave_nova
 
-   curl https://api.melbrai.com.br/healthz   # teste final de fora
-   ```
-4. O app (`lib/services/ai_command_service.dart`) já aponta pra
-   `https://api.melbrai.com.br` — nenhuma mudança de código necessária
-   depois do deploy, só testar no aparelho.
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+
+cp melembra-ai-backend.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now melembra-ai-backend
+curl http://127.0.0.1:8091/healthz   # {"status":"ok"}
+
+cp nginx-api.conf /etc/nginx/sites-available/api.melbrai.com.br
+ln -s /etc/nginx/sites-available/api.melbrai.com.br /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# só depois do DNS propagar:
+certbot --nginx -d api.melbrai.com.br
+curl https://api.melbrai.com.br/healthz   # teste final de fora
+```
 
 ---
 
@@ -358,3 +386,4 @@ systemctl start sos-notifier
 | 13g | 2026-07-03 | Melhoria de UX sugerida pelo usuário: campo de contato SOS em `config_screen.dart` agora mostra `+55` fixo como `prefixText` (não editável, não faz parte do texto digitado) — reforça visualmente o formato correto sem mudar o dado salvo, já que a normalização para E.164 continua acontecendo em `_paraE164()` na hora de discar. v1.3.8 |
 | 14 | 2026-07-03 | Reformulação de UX do perfil Idoso: botão único "Falar Comando" absorve os antigos botões separados "Ouvir lembretes de hoje", "Criar lembrete por voz" e "Meus Alertas SOS" (removidos da tela). Novo roteador `_processarComando()` em `elderly_screen.dart` classifica a frase reconhecida por palavras-chave e decide a ação (ouvir lembretes / criar lembrete / adicionar item na lista / falar resumo de alertas), reaproveitando o parser de NLU já existente (`_parsearDataHora`, `_limparTitulo`, `_inferirTipo`, `_inferirRecorrencia`). "SOCORRO" continua com prioridade máxima a qualquer momento da escuta. Novo `_falarResumoAlertas()` lê em voz alta um resumo dos alertas SOS (via `SosFeedService`) em vez de abrir tela. Objetivo: minimizar necessidade de toque/digitação para o usuário idoso. v1.4.0 |
 | 15 | 2026-07-03 | Pedido do usuário: app "interagindo com o usuário" como um agente. Avaliado o framework Hermes Agent (não aplicável — é um agente de terminal, não conversa por voz num app mobile). Decidido: backend próprio na VPS (`server/ai_command_server/`, Flask) chamando a **API da Groq** (`llama-3.3-70b-versatile`, escolha do usuário, tier grátis) para interpretar frases que não batem nas regras locais rápidas, devolvendo ação estruturada em JSON. Autenticação via `firebase_admin.auth.verify_id_token` (reaproveita o `serviceAccountKey.json` do `sos_notifier.py`). App: nova dependência `http`, novo `lib/services/ai_command_service.dart` (`AiCommandService.interpretar`, timeout 6s, retorna `null` em qualquer falha), `_processarComando` tenta a IA antes do parser local (fallback automático offline). SOS continua 100% local, inalterado. **Bloqueado até ter domínio configurado** (`AiCommandService._baseUrl` é um placeholder) — ver seção "Backend de comando de voz por IA" acima. **Nota de segurança**: usuário colou uma API key da Groq em texto plano na conversa — precisa revogar e gerar uma nova antes do deploy. v1.4.1 (Flutter pronto; backend aguardando deploy) |
+| 16 | 2026-07-03 | Deploy real do backend de IA na VPS `204.168.180.25`. Domínio definido: `api.melbrai.com.br` (primeira tentativa usou domínio errado — `mylaassistente.com.br`, de outra aplicação do usuário — revertida antes de commitar). Backend rodando com sucesso na porta **8091** (trocada de 8001 por conflito com container Docker de outro projeto — VPS é compartilhada com vários outros projetos do usuário). Corrigido: venv Python (Ubuntu 24.04 bloqueia pip fora de venv, PEP 668), `serviceAccountKey.json` novo gerado no Firebase Console (não existia `/root/sos_notifier/` pra reaproveitar — descoberto que o `sos_notifier.py` nunca foi implantado nessa VPS de fato, apesar da documentação dizer o contrário — ver "Lacunas"). Confundido duas vezes `google-services.json` (config Android) com o `serviceAccountKey.json` (Admin SDK) até achar a aba certa no Firebase Console. **Dois vazamentos de segredo tratados**: chave da Groq (revogada e trocada) e um `GITHUB_TOKEN` que apareceu num `/root/.env` criado sem querer (apagado; token precisa ser revogado no GitHub se ainda não foi). Achado e não tocado: clone Git órfão em `/root/ME-LEMBRA-AI` com segredos soltos em arquivos não commitados — fica pra limpeza futura, com autorização explícita. **Pendente**: DNS do `melbrai.com.br` migrando pra Cloudflare (~45 min), registro A `api` ainda não confirmado, certificado HTTPS via certbot bloqueado até isso propagar. v1.4.2 (código sem mudança nesta sessão — só infraestrutura) |
