@@ -12,8 +12,8 @@ import '../../services/reminder_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/sos_service.dart';
 import '../../services/voice_service.dart';
+import '../../services/sos_feed_service.dart';
 import '../family/family_contact_sheet.dart';
-import '../family/sos_history_screen.dart';
 import '../maps/map_screen.dart';
 import '../vehicle/vehicle_screen.dart';
 import 'meus_lembretes_screen.dart';
@@ -42,6 +42,8 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   bool _sosEmExecucao = false;
   String _mensagem = 'Bem-vindo!';
   String _textoReconhecido = '';
+  String _capturaComando = '';
+  bool _comandoProcessado = false;
 
   // SOS por toques: 5 toques em 3 s
   final List<DateTime> _tapTimes = [];
@@ -160,7 +162,13 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     );
   }
 
-  Future<void> _alternarEscuta() async {
+  /// Ponto único de entrada por voz da tela do idoso: ouve um comando
+  /// livre e roteia para a ação certa (ouvir lembretes, criar lembrete,
+  /// adicionar item na lista, checar alertas SOS ou, a qualquer momento,
+  /// "SOCORRO" com prioridade máxima). Substitui os antigos botões
+  /// separados "Ouvir lembretes", "Criar lembrete por voz" e "Meus
+  /// Alertas SOS" — tudo passa a ser feito só falando.
+  Future<void> _falarComando() async {
     if (_isListening) {
       await _speech.stop();
       setState(() => _isListening = false);
@@ -169,8 +177,9 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
 
     final disponivel = await _speech.initialize(
       onStatus: (status) {
-        if (status == 'done' || status == 'notListening') {
+        if ((status == 'done' || status == 'notListening') && _isListening) {
           if (mounted) setState(() => _isListening = false);
+          _finalizarComando();
         }
       },
       onError: (_) {
@@ -183,27 +192,118 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       return;
     }
 
-    setState(() => _isListening = true);
+    _capturaComando = '';
+    _comandoProcessado = false;
+    setState(() {
+      _isListening = true;
+      _textoReconhecido = '';
+    });
+
     _speech.listen(
       localeId: 'pt_BR',
+      listenFor: const Duration(seconds: 12),
+      pauseFor: const Duration(seconds: 3),
       onResult: (result) {
-        final texto = result.recognizedWords;
+        _capturaComando = result.recognizedWords;
         setState(() {
-          _textoReconhecido = texto;
-          if (texto.isNotEmpty) _mensagem = texto;
+          _textoReconhecido = _capturaComando;
+          if (_capturaComando.isNotEmpty) _mensagem = _capturaComando;
         });
-        if (texto.toUpperCase().contains('SOCORRO') && !_sosDisparado) {
+
+        // SOCORRO tem prioridade máxima: dispara na hora, sem esperar
+        // terminar de entender o resto do comando.
+        if (_capturaComando.toUpperCase().contains('SOCORRO') && !_sosDisparado) {
           _sosDisparado = true;
+          _comandoProcessado = true;
           _speech.stop();
           if (mounted) setState(() => _isListening = false);
           _acionarSOS();
-          // Libera novo disparo após 10s
           Future<void>.delayed(const Duration(seconds: 10), () {
             if (mounted) _sosDisparado = false;
           });
+          return;
+        }
+
+        if (result.finalResult) {
+          _finalizarComando();
         }
       },
     );
+  }
+
+  void _finalizarComando() {
+    if (_comandoProcessado) return;
+    _comandoProcessado = true;
+    _processarComando(_capturaComando);
+  }
+
+  /// Interpreta o comando reconhecido e decide a ação: ouvir lembretes,
+  /// checar alertas SOS, adicionar item na lista de compras, ou (padrão)
+  /// criar um lembrete novo a partir da frase.
+  Future<void> _processarComando(String raw) async {
+    if (!mounted) return;
+    final texto = raw.trim();
+    if (texto.isEmpty) {
+      await _falar('Não entendi. Toque em Falar Comando e tente de novo.');
+      return;
+    }
+    final t = texto.toLowerCase();
+
+    final pedeOuvirLembretes = t.contains('lembrete') &&
+        (t.contains('ouvir') || t.contains('ler') || t.contains('quais') ||
+            t.contains('que lembretes') || t.contains('tenho lembrete'));
+    if (pedeOuvirLembretes) {
+      await _lerLembretesDoDia();
+      return;
+    }
+
+    final pedeAlertas = t.contains('alerta') ||
+        (t.contains('sos') &&
+            (t.contains('meus') || t.contains('histórico') || t.contains('historico')));
+    if (pedeAlertas) {
+      await _falarResumoAlertas();
+      return;
+    }
+
+    if (_isAdicionarNaLista(texto)) {
+      await _adicionarItemNaListaDeCompras(texto);
+      return;
+    }
+
+    // Padrão: trata como pedido de criar lembrete.
+    await _criarLembreteDoTexto(texto);
+  }
+
+  /// Fala um resumo dos alertas SOS do próprio usuário (substitui a tela
+  /// "Meus Alertas SOS" — nada pra tocar, só ouvir).
+  Future<void> _falarResumoAlertas() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (uid.isEmpty) {
+      await _falar('Não consegui verificar seus alertas agora.');
+      return;
+    }
+    final alertas = await SosFeedService.streamOwnAlerts(uid).first;
+    if (alertas.isEmpty) {
+      await _falar('Você não tem nenhum alerta de SOS registrado.');
+      return;
+    }
+    final total = alertas.length;
+    final ultimo = alertas.first;
+    final visto = ultimo.viewedBy.length;
+    final agora = DateTime.now();
+    final dt = ultimo.createdAt;
+    final quandoStr = dt == null
+        ? 'agora há pouco'
+        : (dt.year == agora.year && dt.month == agora.month && dt.day == agora.day)
+            ? 'hoje às ${_horaFalada(dt)}'
+            : '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')} às ${_horaFalada(dt)}';
+    final vistoFrase = visto > 0
+        ? 'visto por $visto familiar${visto > 1 ? 'es' : ''}'
+        : 'ainda não visto por ninguém';
+    final qtdFrase = total == 1
+        ? 'Você tem 1 alerta de SOS registrado.'
+        : 'Você tem $total alertas de SOS registrados.';
+    await _falar('$qtdFrase O mais recente foi $quandoStr, $vistoFrase.');
   }
 
   Future<void> _acionarSOS() async {
@@ -612,50 +712,9 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     await VoiceService.speak(confirmacao);
   }
 
-  /// Cria um lembrete a partir de um comando de voz.
+  /// Cria um lembrete a partir de um comando de voz já capturado.
   /// Interpreta data, hora e categoria da frase reconhecida.
-  Future<void> _criarLembretePorVoz() async {
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-    }
-
-    final disponivel = await _speech.initialize();
-    if (!disponivel) {
-      await _falar('Reconhecimento de voz indisponível.');
-      return;
-    }
-
-    await _falar('Me diga o lembrete depois do sinal.');
-    setState(() => _isListening = true);
-
-    String captura = '';
-    _speech.listen(
-      localeId: 'pt_BR',
-      listenFor: const Duration(seconds: 8),
-      onResult: (result) {
-        captura = result.recognizedWords;
-        setState(() => _textoReconhecido = captura);
-      },
-    );
-
-    await Future<void>.delayed(const Duration(seconds: 9));
-    await _speech.stop();
-    if (!mounted) return;
-    setState(() => _isListening = false);
-
-    final raw = captura.trim();
-    if (raw.isEmpty) {
-      await _falar('Não entendi. Tente novamente.');
-      return;
-    }
-
-    // ── Comando especial: adicionar item à lista de compras ───────────────
-    if (_isAdicionarNaLista(raw)) {
-      await _adicionarItemNaListaDeCompras(raw);
-      return;
-    }
-
+  Future<void> _criarLembreteDoTexto(String raw) async {
     try {
       if (FirebaseAuth.instance.currentUser == null) {
         await FirebaseAuth.instance.signInAnonymously();
@@ -769,9 +828,11 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
               const SizedBox(height: 16),
               _botaoGrande(
                 icon: _isListening ? Icons.mic : Icons.mic_none,
-                label: _isListening ? 'Ouvindo...' : 'Falar comando',
+                label: _isListening ? 'Ouvindo...' : 'Falar Comando',
                 color: _isListening ? Colors.orange : _primary,
-                onPressed: _alternarEscuta,
+                onPressed: _falarComando,
+                height: 90,
+                fontSize: 26,
               ),
               if (_textoReconhecido.isNotEmpty) ...[
                 const SizedBox(height: 10),
@@ -780,21 +841,16 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 18, color: Colors.black54),
                 ),
+              ] else ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'Toque e diga, por exemplo: "me lembra de tomar remédio às 8", '
+                  '"quais são meus lembretes de hoje", "adiciona leite na lista '
+                  'de compras" ou "meus alertas".',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                ),
               ],
-              const SizedBox(height: 16),
-              _botaoGrande(
-                icon: Icons.volume_up,
-                label: 'Ouvir lembretes de hoje',
-                color: Colors.teal,
-                onPressed: _lerLembretesDoDia,
-              ),
-              const SizedBox(height: 16),
-              _botaoGrande(
-                icon: Icons.add_alert,
-                label: 'Criar lembrete por voz',
-                color: const Color(0xFF6A1B9A),
-                onPressed: _criarLembretePorVoz,
-              ),
               const SizedBox(height: 16),
               _botaoGrande(
                 icon: Icons.list_alt,
@@ -825,17 +881,6 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const VehicleScreen()),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _botaoGrande(
-                icon: Icons.history,
-                label: 'Meus Alertas SOS',
-                color: const Color(0xFFEF5350),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const SosHistoryScreen()),
                 ),
               ),
               const SizedBox(height: 16),
