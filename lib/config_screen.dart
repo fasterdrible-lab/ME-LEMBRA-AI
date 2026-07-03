@@ -298,9 +298,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
                                     },
                                     decoration: InputDecoration(
                                       hintText: idx == 0
-                                          ? 'Contato principal (ex: 11999999999)'
-                                          : 'Contato ${idx + 1} (ex: 11998888888)',
+                                          ? 'DDD + número (ex: 11999999999)'
+                                          : 'Contato ${idx + 1}: DDD + número',
                                       prefixIcon: const Icon(Icons.phone, color: Color(0xFFE53935)),
+                                      prefixText: '+55 ',
+                                      prefixStyle: const TextStyle(
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                       filled: true,
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
