@@ -228,8 +228,10 @@ Acionamento (botão, voz "SOCORRO", detector de queda, 5× volume):
            ├─ 3. ChatService.send() para cada cuidador vinculado
            └─ 4. SosService._triggerCall()  ← chama o 1º número da lista
                   ├─ SettingsService.getSosNumero() → primeiro de getSosNumeros()
+                  ├─ _paraE164() → normaliza para +55... (obrigatório: sem o
+                  │    código do país a operadora rejeita a chamada VoLTE)
                   ├─ Permission.phone.request()
-                  ├─ CONCEDIDA → MethodChannel "call" → Intent.ACTION_CALL
+                  ├─ CONCEDIDA → MethodChannel "call" → TelecomManager.placeCall()
                   └─ NEGADA    → url_launcher tel: (abre discador)
          Se getSosNumeros().length > 1:
            Dialog "Contatos adicionais" com botão por número extra

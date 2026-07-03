@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.3.6+12` |
-| APK atual | `me-lembra-ai-v1.3.6.apk` — 63.9 MB |
+| Versão do app | `1.3.7+13` |
+| APK atual | `me-lembra-ai-v1.3.7.apk` — 63.9 MB |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
@@ -166,7 +166,7 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 | Countdown 5 s antes de disparar SOS | Baixo | Não implementado |
 | Publicação na Play Store | Baixo | APK só em side-load |
 | VPS: reiniciar `sos-notifier.service` após novo `sos_notifier.py` | Operacional | Ver seção Deploy VPS |
-| Ligação automática do SOS pode ser cancelada pela rede/operadora (SIP 487) em alguns aparelhos/chips | Médio | Fora do controle do app (confirmado via `adb`: falha até em chamada disparada sem nenhum código do app). Mitigado com tela de confirmação manual "LIGAR AGORA" — ver sessão 13e |
+~~Ligação automática do SOS cancelada pela rede/operadora (SIP 487)~~ | ~~Médio~~ | ✅ Corrigido na sessão 13f — faltava o código do país (+55) no número discado |
 
 ---
 
@@ -287,3 +287,4 @@ systemctl start sos-notifier
 | 13c | 2026-07-02 | Debug via `adb logcat` no aparelho físico (R9QL200MJ0N) confirmou que a ligação em si funcionava (Telecom `Allowed`, chegou a `DIALING`); o "número incorreto" era o próprio número salvo com erro de digitação — confirmado pelo usuário testando o mesmo número direto no discador nativo. Bug real encontrado nessa investigação: o toggle "Botão de Pânico (SOS)" nunca era checado em `SosService.trigger()` — desativá-lo não impedia a ligação. Corrigido: `trigger()` agora retorna cedo se `SettingsService.getSos()` for `false`; `elderly_screen.dart` mostra aviso e não roda mais a contagem regressiva/voz quando o SOS está desativado. v1.3.3 |
 | 13d | 2026-07-02/03 | Usuário confirmou que o número (11940066219) está correto e às vezes funciona — erro intermitente, não número errado. Log mostrou `MAKE_ROOM_FOR_OUTGOING_CALLS` e disconnect REMOTE/SIP 487, condizente com duas ligações se sobrepondo. Causa: `SosService.callNumber()`/`trigger()` não tinham proteção contra chamadas concorrentes (botão, voz, 5 toques, volume e detector de queda podem todos acionar o mesmo fluxo). Corrigido: trava estática `_ligando` + cooldown de 10s em `sos_service.dart`; trava `_sosEmExecucao` em `elderly_screen.dart` (fluxo extraído para `_executarFluxoSOS()`). v1.3.4 |
 | 13e | 2026-07-03 | Erro persistiu mesmo sem sobreposição. Debug profundo via `adb logcat` + `dumpsys telecom` no aparelho físico eliminou hipóteses de código: (1) trocada API de `Intent.ACTION_CALL` para `TelecomManager.placeCall()` (API recomendada pelo Google) em `MainActivity.kt` — mesmo resultado; (2) confirmado só 1 `PhoneAccount`/SIM registrado (sem ambiguidade de chip); (3) ligação disparada **sem nenhum código do app**, direto via `adb shell am start -a android.intent.action.CALL`, falhou idêntico. Conclusão: chamada chega à pilha VoLTE (`ResipVolteHandler`/`StackIF`) e é cancelada pela **rede** (`Code: REMOTE`, SIP 487 `CODE_SIP_REQUEST_CANCELLED`) — fora do controle do app. Mitigação implementada: `SosService.openDialer()` (abre discador com número preenchido, sem tentar ligar automaticamente — mesmo caminho de uma ligação digitada à mão) + tela "Confirmar chamada de emergência" com botão "LIGAR AGORA" por contato, sempre exibida após `trigger()` em `elderly_screen.dart` e `map_screen.dart` (antes só aparecia com 2+ contatos). Alerta Firestore + aviso ao chat da família continuam funcionando independente da ligação. v1.3.6 |
+| 13f | 2026-07-03 | **Causa raiz encontrada e corrigida.** Print da tela do discador nativo confirmou que o número chega intacto (`11 94006-6219`, idêntico ao salvo) — descartando de vez erro de digitação/corrupção. Teste via `adb shell am start` comparando `tel:11940066219` (sem +55) vs `tel:+5511940066219` (com +55) mostrou a diferença: **sem** o código do país a operadora rejeita a chamada em 4-8s (`SET_DISCONNECTED Code: REMOTE`, SIP 487); **com** `+55`, o Android converte automaticamente para `015...` (código de acesso nacional) e a chamada toca normalmente por ~16s até `CODE_USER_TERMINATED_BY_REMOTE` (comportamento normal de chamada não atendida). Essa operadora/SIM exige formato E.164 para rotear corretamente chamadas de saída via VoLTE, mesmo para números nacionais. Corrigido: `SosService._paraE164()` normaliza todo número para `+55...` antes de discar (em `callNumber()` e `openDialer()`) quando ainda não tem `+`. **Confirmado funcionando pelo usuário em teste real.** v1.3.7 |

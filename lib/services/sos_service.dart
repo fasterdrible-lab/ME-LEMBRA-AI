@@ -89,6 +89,16 @@ class SosService {
     await callNumber(numero);
   }
 
+  /// Normaliza para E.164 (+55...). Confirmado por teste em campo: sem o
+  /// código do país, a operadora rejeita a chamada de saída (SIP 487)
+  /// mesmo com DDD e número corretos — com +55 ela roteia normalmente.
+  static String _paraE164(String clean) {
+    if (clean.startsWith('+')) return clean;
+    // Já digitado com 55 na frente (sem o +): não duplicar.
+    if (clean.length >= 12 && clean.startsWith('55')) return '+$clean';
+    return '+55$clean';
+  }
+
   /// Liga para um número específico.
   /// Tenta ligação direta (ACTION_CALL) se CALL_PHONE concedida;
   /// caso contrário abre o discador (ACTION_DIAL).
@@ -99,6 +109,7 @@ class SosService {
     // manual do mesmo número falham — por isso a validação aqui.
     final digits = clean.replaceAll('+', '');
     if (digits.length < 10) return;
+    final paraDiscar = _paraE164(clean);
 
     if (_ligando) return;
     final agora = DateTime.now();
@@ -112,12 +123,12 @@ class SosService {
       final status = await Permission.phone.request();
       if (status.isGranted) {
         try {
-          await _callChannel.invokeMethod('callNumber', clean);
+          await _callChannel.invokeMethod('callNumber', paraDiscar);
           return;
         } catch (_) {}
       }
 
-      final uri = Uri(scheme: 'tel', path: clean);
+      final uri = Uri(scheme: 'tel', path: paraDiscar);
       if (await canLaunchUrl(uri)) await launchUrl(uri);
     } finally {
       _ligando = false;
@@ -132,7 +143,7 @@ class SosService {
   static Future<void> openDialer(String numero) async {
     final clean = numero.replaceAll(RegExp(r'[^\d+]'), '');
     if (clean.isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: clean);
+    final uri = Uri(scheme: 'tel', path: _paraE164(clean));
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 }
