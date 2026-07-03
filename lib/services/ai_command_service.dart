@@ -45,14 +45,12 @@ class ComandoAction {
 /// Se o backend estiver fora do ar, sem internet, ou demorar demais,
 /// `interpretar` retorna `null` e quem chamou deve usar o fallback local.
 class AiCommandService {
-  // TODO: trocar pelo domínio real da VPS depois de configurar o DNS e o
-  // certificado HTTPS (ver docs/ARCHITECTURE.md, seção "Backend de comando
-  // de voz por IA"). Sem isso, o serviço sempre retorna null (fallback local).
-  static const String _baseUrl = 'https://SEU_DOMINIO_AQUI';
+  // Backend na VPS Hetzner (204.168.180.25), atrás de nginx + Let's Encrypt.
+  // Ver docs/CURRENT_STATE.md, seção "Backend de comando de voz por IA",
+  // para o passo a passo de deploy (DNS, systemd, nginx, certbot).
+  static const String _baseUrl = 'https://api.melbrai.com.br';
 
   static Future<ComandoAction?> interpretar(String texto) async {
-    if (_baseUrl.contains('SEU_DOMINIO_AQUI')) return null;
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return null;

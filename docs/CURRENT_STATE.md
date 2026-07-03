@@ -256,23 +256,45 @@ usa a API da Groq (`llama-3.3-70b-versatile`, grátis até 30k tokens/min e
 14.400 req/dia) para devolver uma ação estruturada em JSON. O SOS nunca passa
 por aqui — continua 100% local no app.
 
-**Pendente para funcionar de verdade** (o app já está pronto, mas o
-`AiCommandService._baseUrl` ainda é um placeholder `SEU_DOMINIO_AQUI` — a
-função retorna `null` e cai no fallback local até isso ser configurado):
+**Domínio**: `api.melbrai.com.br` (já configurado em
+`AiCommandService._baseUrl`). Falta:
 
-1. Comprar/apontar um domínio para `204.168.180.25` (Let's Encrypt não emite
-   certificado para IP puro).
-2. Na VPS: copiar `server/ai_command_server/` para `/root/ai_command_server/`,
-   copiar o mesmo `serviceAccountKey.json` já usado pelo `sos_notifier.py`,
-   criar `.env` (a partir de `.env.example`) com `GROQ_API_KEY` — **gerar uma
-   chave nova no console da Groq**, a que apareceu na conversa foi exposta e
+1. **DNS**: criar um registro A `api` → `204.168.180.25` no painel do
+   registrador do domínio `melbrai.com.br`. Propagação pode levar de minutos
+   a algumas horas.
+2. **Chave da Groq**: gerar uma **chave nova** no console da Groq
+   (https://console.groq.com/keys) — a que apareceu na conversa foi exposta e
    deve ser revogada.
-3. `pip3 install -r requirements.txt`, copiar `melembra-ai-backend.service`
-   para `/etc/systemd/system/`, `systemctl enable/start melembra-ai-backend`.
-4. Configurar nginx como proxy reverso (`https://<dominio> → 127.0.0.1:8001`)
-   + `certbot --nginx` para o certificado.
-5. Atualizar `AiCommandService._baseUrl` em
-   `lib/services/ai_command_service.dart` com o domínio real e gerar novo APK.
+3. **Deploy na VPS** (via SSH, `ssh root@204.168.180.25`):
+   ```bash
+   apt update && apt install -y nginx python3-pip certbot python3-certbot-nginx
+
+   # copiar server/ai_command_server/ da máquina local para a VPS antes disto
+   # (scp -r server/ai_command_server root@204.168.180.25:/root/ai_command_server)
+   cd /root/ai_command_server
+   cp /root/sos_notifier/serviceAccountKey.json .
+   cp .env.example .env
+   nano .env   # colar a chave nova da Groq em GROQ_API_KEY
+
+   pip3 install -r requirements.txt
+   cp melembra-ai-backend.service /etc/systemd/system/
+   systemctl daemon-reload
+   systemctl enable melembra-ai-backend
+   systemctl start melembra-ai-backend
+   curl http://127.0.0.1:8001/healthz   # deve responder {"status":"ok"}
+
+   cp nginx-api.conf /etc/nginx/sites-available/api.melbrai.com.br
+   ln -s /etc/nginx/sites-available/api.melbrai.com.br /etc/nginx/sites-enabled/
+   nginx -t && systemctl reload nginx
+
+   # só depois do DNS já ter propagado:
+   certbot --nginx -d api.melbrai.com.br
+
+   curl https://api.melbrai.com.br/healthz   # teste final de fora
+   ```
+4. O app (`lib/services/ai_command_service.dart`) já aponta pra
+   `https://api.melbrai.com.br` — nenhuma mudança de código necessária
+   depois do deploy, só testar no aparelho.
 
 ---
 
