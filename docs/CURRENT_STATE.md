@@ -266,7 +266,11 @@ por aqui — continua 100% local no app.
    (https://console.groq.com/keys) — a que apareceu na conversa foi exposta e
    deve ser revogada.
 3. **Deploy na VPS** (via SSH, `ssh root@204.168.180.25`) — **atenção**: essa
-   VPS é compartilhada com outros projetos do usuário; `/root/sos_notifier/`
+   VPS é compartilhada com **vários outros projetos** do usuário (containers
+   Docker, nginx, uvicorn, mysql, postgres, redis, apps Node/Next), com
+   portas já ocupadas (8001, 8000, 8080, 6001, 6002, 3001, 3002, 4000, 4100,
+   3100, etc. — checar com `ss -tlnp` antes de escolher uma nova porta). O
+   backend de IA usa a porta **8091**. `/root/sos_notifier/`
    documentado abaixo **não existe nela** (o serviço de push do SOS nunca foi
    implantado aqui de fato — lacuna de produção anterior a esta sessão, sem
    relação com o backend de IA). Por isso o `serviceAccountKey.json` é um
@@ -290,7 +294,7 @@ por aqui — continua 100% local no app.
    systemctl daemon-reload
    systemctl enable melembra-ai-backend
    systemctl start melembra-ai-backend
-   curl http://127.0.0.1:8001/healthz   # deve responder {"status":"ok"}
+   curl http://127.0.0.1:8091/healthz   # deve responder {"status":"ok"}
 
    cp nginx-api.conf /etc/nginx/sites-available/api.melbrai.com.br
    ln -s /etc/nginx/sites-available/api.melbrai.com.br /etc/nginx/sites-enabled/

@@ -452,7 +452,7 @@ server/
     app.py                           # Flask: POST /interpretar-comando (Groq)
     requirements.txt                 # flask, gunicorn, groq, firebase-admin
     .env.example                     # modelo do .env (GROQ_API_KEY) — não commitado
-    melembra-ai-backend.service      # unit systemd (gunicorn na porta 8001)
+    melembra-ai-backend.service      # unit systemd (gunicorn na porta 8091)
     nginx-api.conf                   # proxy reverso api.melbrai.com.br
 
 test/
