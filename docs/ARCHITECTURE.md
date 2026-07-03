@@ -306,6 +306,27 @@ Usuário solta o botão:
     └─ Deleta arquivo temporário
 ```
 
+### Comando de voz (Falar Comando)
+
+```
+Usuário toca "Falar Comando" e fala:
+  _falarComando() → STT (speech_to_text) → _processarComando(texto)
+    ├─ "SOCORRO" a qualquer momento → SEMPRE local, prioridade máxima → _acionarSOS()
+    ├─ regras locais rápidas (ouvir lembretes / alertas / adicionar na lista)
+    │    → resolve na hora, sem rede
+    └─ qualquer outra frase:
+         AiCommandService.interpretar(texto)
+           ├─ POST https://<dominio>/interpretar-comando
+           │    Authorization: Bearer <Firebase ID token>
+           │    (timeout 6s)
+           ├─ backend (server/ai_command_server/, na VPS):
+           │    ├─ verifica o ID token (firebase_admin.auth)
+           │    └─ chama a Groq (llama-3.3-70b-versatile) → JSON estruturado
+           ├─ sucesso → _executarAcaoIA(acao) despacha pro handler certo
+           └─ falha/timeout/sem internet → retorna null →
+                cai no parser local de sempre (_criarLembreteDoTexto)
+```
+
 ### Widget Android
 
 ```
@@ -427,6 +448,11 @@ server/
   sos_notifier.py                    # VPS: escuta Firestore → envia FCM push
   requirements.txt                   # firebase-admin
   sos-notifier.service               # unit systemd
+  ai_command_server/                 # VPS: backend do comando de voz por IA
+    app.py                           # Flask: POST /interpretar-comando (Groq)
+    requirements.txt                 # flask, gunicorn, groq, firebase-admin
+    .env.example                     # modelo do .env (GROQ_API_KEY) — não commitado
+    melembra-ai-backend.service      # unit systemd (gunicorn na porta 8001)
 
 test/
   login_screen_test.dart             # 6 widget tests

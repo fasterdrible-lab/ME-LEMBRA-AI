@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../models/reminder.dart';
+import '../../services/ai_command_service.dart';
 import '../../services/fall_detector_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/profile_service.dart';
@@ -270,8 +271,42 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       return;
     }
 
-    // Padrão: trata como pedido de criar lembrete.
+    // Frase fora dos atalhos locais: tenta interpretar com IA (backend
+    // próprio, que chama a Groq). Se não conseguir (sem internet, backend
+    // fora do ar, timeout de ~6s), cai no parser local de sempre.
+    final acaoIA = await AiCommandService.interpretar(texto);
+    if (acaoIA != null) {
+      await _executarAcaoIA(acaoIA);
+      return;
+    }
+
+    // Padrão (sem IA disponível): trata como pedido de criar lembrete.
     await _criarLembreteDoTexto(texto);
+  }
+
+  /// Executa a ação estruturada devolvida pelo backend de IA.
+  Future<void> _executarAcaoIA(ComandoAction acao) async {
+    switch (acao.acao) {
+      case 'ouvir_lembretes':
+        await _lerLembretesDoDia();
+        break;
+      case 'consultar_alertas':
+        await _falarResumoAlertas();
+        break;
+      case 'adicionar_item_lista':
+        if (acao.itens.isNotEmpty) {
+          await _adicionarItensNaLista(acao.itens);
+        } else {
+          await _falar('Não entendi o item. Tente novamente.');
+        }
+        break;
+      case 'criar_lembrete':
+        await _criarLembreteDeAcao(acao);
+        break;
+      case 'responder':
+      default:
+        await _falar(acao.fala.isNotEmpty ? acao.fala : 'Não entendi. Pode repetir?');
+    }
   }
 
   /// Fala um resumo dos alertas SOS do próprio usuário (substitui a tela
@@ -653,17 +688,22 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
 
   /// Adiciona item(ns) a um lembrete de Compras existente, ou cria novo card.
   Future<void> _adicionarItemNaListaDeCompras(String raw) async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-    final userId = FirebaseAuth.instance.currentUser!.uid;
-    final perfil = await ProfileService.getProfile() ?? '';
-
     final novosItens = _extrairItensDoComando(raw);
     if (novosItens.isEmpty) {
       await _falar('Não entendi o item. Tente novamente.');
       return;
     }
+    await _adicionarItensNaLista(novosItens);
+  }
+
+  /// Adiciona item(ns) já extraídos (por regex local ou pela IA) a um
+  /// lembrete de Compras existente, ou cria um novo card.
+  Future<void> _adicionarItensNaLista(List<String> novosItens) async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+    final perfil = await ProfileService.getProfile() ?? '';
 
     // Busca lembrete de Compras já existente
     final todos = await ReminderService.getAll();
@@ -713,77 +753,114 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   }
 
   /// Cria um lembrete a partir de um comando de voz já capturado.
-  /// Interpreta data, hora e categoria da frase reconhecida.
+  /// Interpreta data, hora e categoria da frase reconhecida (parser local).
   Future<void> _criarLembreteDoTexto(String raw) async {
     try {
-      if (FirebaseAuth.instance.currentUser == null) {
-        await FirebaseAuth.instance.signInAnonymously();
-      }
-      final userId = FirebaseAuth.instance.currentUser!.uid;
-      final perfil = await ProfileService.getProfile() ?? '';
       final dateTime = _parsearDataHora(raw);
       final tituloLimpo = _limparTitulo(raw);
       final tipo = _inferirTipo(raw);
       final repeat = _inferirRecorrencia(raw);
       final descricao = tipo == 'Compras' ? _extrairItensCompra(raw) : '';
-
-      final reminder = Reminder(
-        id: '',
-        userId: userId,
-        title: tituloLimpo,
-        type: tipo,
-        description: descricao,
+      await _salvarLembrete(
+        titulo: tituloLimpo,
+        tipo: tipo,
         dateTime: dateTime,
         repeat: repeat,
-        notification: '',
-        perfil: perfil,
-      );
-      await ReminderService.add(reminder);
-
-      final notifId = (tituloLimpo.hashCode ^ dateTime.millisecondsSinceEpoch)
-          .remainder(2147483647)
-          .abs();
-
-      if (repeat != 'unico') {
-        await NotificationService.scheduleRepeatingReminder(
-          id: notifId,
-          title: tipo,
-          body: tituloLimpo,
-          scheduledDate: dateTime,
-          repeat: repeat,
-        );
-      } else {
-        await NotificationService.scheduleReminder(
-          id: notifId,
-          title: tipo,
-          body: tituloLimpo,
-          scheduledDate: dateTime,
-        );
-      }
-
-      final diaStr = dateTime.day.toString().padLeft(2, '0');
-      final mesStr = dateTime.month.toString().padLeft(2, '0');
-      final horaFalada = _horaFalada(dateTime);
-      final repeatFrase = repeat == 'diario'
-          ? ', todo dia'
-          : repeat == 'semanal'
-              ? ', toda semana'
-              : ', para $diaStr de $mesStr';
-      final tipoLabel = const {
-        'Remedio':    'de remédio',
-        'Consulta':   'de consulta',
-        'Aniversario':'de aniversário',
-        'Mercado':    'de mercado',
-        'Reuniao':    'de evento',
-        'Tomar':      'de tomar',
-      }[tipo];
-      final tipoFrase = tipoLabel != null ? '$tipoLabel ' : '';
-      await VoiceService.speak(
-        'Lembrete ${tipoFrase}criado: $tituloLimpo$repeatFrase às $horaFalada.',
+        descricao: descricao,
       );
     } catch (e) {
       await _falar('Não consegui salvar o lembrete.');
     }
+  }
+
+  /// Cria um lembrete a partir dos campos já extraídos pela IA (backend),
+  /// evitando rodar o parser local de novo em cima do texto.
+  Future<void> _criarLembreteDeAcao(ComandoAction acao) async {
+    try {
+      final titulo = (acao.titulo?.trim().isNotEmpty ?? false)
+          ? acao.titulo!.trim()
+          : 'Lembrete';
+      await _salvarLembrete(
+        titulo: titulo,
+        tipo: acao.tipo ?? 'Remedio',
+        dateTime: acao.dataHora ?? DateTime.now().add(const Duration(minutes: 1)),
+        repeat: acao.recorrencia ?? 'unico',
+      );
+    } catch (e) {
+      await _falar('Não consegui salvar o lembrete.');
+    }
+  }
+
+  /// Salva o lembrete, agenda a notificação e confirma por voz. Usado tanto
+  /// pelo parser local (_criarLembreteDoTexto) quanto pela ação vinda da IA
+  /// (_criarLembreteDeAcao).
+  Future<void> _salvarLembrete({
+    required String titulo,
+    required String tipo,
+    required DateTime dateTime,
+    required String repeat,
+    String descricao = '',
+  }) async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+    final perfil = await ProfileService.getProfile() ?? '';
+
+    final reminder = Reminder(
+      id: '',
+      userId: userId,
+      title: titulo,
+      type: tipo,
+      description: descricao,
+      dateTime: dateTime,
+      repeat: repeat,
+      notification: '',
+      perfil: perfil,
+    );
+    await ReminderService.add(reminder);
+
+    final notifId = (titulo.hashCode ^ dateTime.millisecondsSinceEpoch)
+        .remainder(2147483647)
+        .abs();
+
+    if (repeat != 'unico') {
+      await NotificationService.scheduleRepeatingReminder(
+        id: notifId,
+        title: tipo,
+        body: titulo,
+        scheduledDate: dateTime,
+        repeat: repeat,
+      );
+    } else {
+      await NotificationService.scheduleReminder(
+        id: notifId,
+        title: tipo,
+        body: titulo,
+        scheduledDate: dateTime,
+      );
+    }
+
+    final diaStr = dateTime.day.toString().padLeft(2, '0');
+    final mesStr = dateTime.month.toString().padLeft(2, '0');
+    final horaFalada = _horaFalada(dateTime);
+    final repeatFrase = repeat == 'diario'
+        ? ', todo dia'
+        : repeat == 'semanal'
+            ? ', toda semana'
+            : ', para $diaStr de $mesStr';
+    final tipoLabel = const {
+      'Remedio':    'de remédio',
+      'Consulta':   'de consulta',
+      'Aniversario':'de aniversário',
+      'Mercado':    'de mercado',
+      'Reuniao':    'de evento',
+      'Tomar':      'de tomar',
+    }[tipo];
+    final tipoFrase = tipoLabel != null ? '$tipoLabel ' : '';
+    await VoiceService.speak(
+      'Lembrete ${tipoFrase}criado: $titulo$repeatFrase às $horaFalada.',
+    );
   }
 
   @override

@@ -69,10 +69,10 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 - [x] Interface com botões grandes (altura 70–90 px, fonte 24–32 px)
 - [x] **Botão único "Falar Comando"**: roteador de intenção por voz que substitui os antigos botões separados de "Ouvir lembretes", "Criar lembrete por voz" e "Meus Alertas SOS" — o usuário só fala o que quer:
   - "quais são meus lembretes de hoje" → lê os lembretes do dia (TTS)
-  - "me lembra de tomar remédio às 8" (ou qualquer frase sem os gatilhos acima/abaixo) → cria lembrete (STT + parser de data/hora em pt-BR)
   - "adiciona leite na lista de compras" → adiciona item à lista de compras existente ou cria uma nova
   - "meus alertas" → fala um resumo dos alertas SOS (quantidade, mais recente, se foi visto pela família) — sem abrir tela
-  - "SOCORRO" a qualquer momento da escuta → prioridade máxima, dispara o SOS na hora
+  - "SOCORRO" a qualquer momento da escuta → prioridade máxima, dispara o SOS na hora, **sempre local, nunca passa pela IA**
+  - qualquer outra frase → primeiro tenta o **backend de IA (Groq)** (`AiCommandService`); se não tiver internet/backend fora do ar, cai no parser local de sempre (STT + data/hora em pt-BR) tratando como criar lembrete
 - [x] Briefing matinal automático às 8h
 - [x] Detector de queda via acelerômetro (sensors_plus)
 - [x] Botão SOS com confirmação por voz ("SOCORRO" aciona SOS)
@@ -248,6 +248,34 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 ---
 
+## Backend de comando de voz por IA (Groq) — `server/ai_command_server/`
+
+Serviço novo, separado do `sos_notifier.py`, que recebe a frase transcrita
+pelo botão "Falar Comando" (quando não bate em nenhuma regra local rápida) e
+usa a API da Groq (`llama-3.3-70b-versatile`, grátis até 30k tokens/min e
+14.400 req/dia) para devolver uma ação estruturada em JSON. O SOS nunca passa
+por aqui — continua 100% local no app.
+
+**Pendente para funcionar de verdade** (o app já está pronto, mas o
+`AiCommandService._baseUrl` ainda é um placeholder `SEU_DOMINIO_AQUI` — a
+função retorna `null` e cai no fallback local até isso ser configurado):
+
+1. Comprar/apontar um domínio para `204.168.180.25` (Let's Encrypt não emite
+   certificado para IP puro).
+2. Na VPS: copiar `server/ai_command_server/` para `/root/ai_command_server/`,
+   copiar o mesmo `serviceAccountKey.json` já usado pelo `sos_notifier.py`,
+   criar `.env` (a partir de `.env.example`) com `GROQ_API_KEY` — **gerar uma
+   chave nova no console da Groq**, a que apareceu na conversa foi exposta e
+   deve ser revogada.
+3. `pip3 install -r requirements.txt`, copiar `melembra-ai-backend.service`
+   para `/etc/systemd/system/`, `systemctl enable/start melembra-ai-backend`.
+4. Configurar nginx como proxy reverso (`https://<dominio> → 127.0.0.1:8001`)
+   + `certbot --nginx` para o certificado.
+5. Atualizar `AiCommandService._baseUrl` em
+   `lib/services/ai_command_service.dart` com o domínio real e gerar novo APK.
+
+---
+
 ## Deploy do sos_notifier.py no VPS
 
 ```bash
@@ -294,3 +322,4 @@ systemctl start sos-notifier
 | 13f | 2026-07-03 | **Causa raiz encontrada e corrigida.** Print da tela do discador nativo confirmou que o número chega intacto (`11 94006-6219`, idêntico ao salvo) — descartando de vez erro de digitação/corrupção. Teste via `adb shell am start` comparando `tel:11940066219` (sem +55) vs `tel:+5511940066219` (com +55) mostrou a diferença: **sem** o código do país a operadora rejeita a chamada em 4-8s (`SET_DISCONNECTED Code: REMOTE`, SIP 487); **com** `+55`, o Android converte automaticamente para `015...` (código de acesso nacional) e a chamada toca normalmente por ~16s até `CODE_USER_TERMINATED_BY_REMOTE` (comportamento normal de chamada não atendida). Essa operadora/SIM exige formato E.164 para rotear corretamente chamadas de saída via VoLTE, mesmo para números nacionais. Corrigido: `SosService._paraE164()` normaliza todo número para `+55...` antes de discar (em `callNumber()` e `openDialer()`) quando ainda não tem `+`. **Confirmado funcionando pelo usuário em teste real.** v1.3.7 |
 | 13g | 2026-07-03 | Melhoria de UX sugerida pelo usuário: campo de contato SOS em `config_screen.dart` agora mostra `+55` fixo como `prefixText` (não editável, não faz parte do texto digitado) — reforça visualmente o formato correto sem mudar o dado salvo, já que a normalização para E.164 continua acontecendo em `_paraE164()` na hora de discar. v1.3.8 |
 | 14 | 2026-07-03 | Reformulação de UX do perfil Idoso: botão único "Falar Comando" absorve os antigos botões separados "Ouvir lembretes de hoje", "Criar lembrete por voz" e "Meus Alertas SOS" (removidos da tela). Novo roteador `_processarComando()` em `elderly_screen.dart` classifica a frase reconhecida por palavras-chave e decide a ação (ouvir lembretes / criar lembrete / adicionar item na lista / falar resumo de alertas), reaproveitando o parser de NLU já existente (`_parsearDataHora`, `_limparTitulo`, `_inferirTipo`, `_inferirRecorrencia`). "SOCORRO" continua com prioridade máxima a qualquer momento da escuta. Novo `_falarResumoAlertas()` lê em voz alta um resumo dos alertas SOS (via `SosFeedService`) em vez de abrir tela. Objetivo: minimizar necessidade de toque/digitação para o usuário idoso. v1.4.0 |
+| 15 | 2026-07-03 | Pedido do usuário: app "interagindo com o usuário" como um agente. Avaliado o framework Hermes Agent (não aplicável — é um agente de terminal, não conversa por voz num app mobile). Decidido: backend próprio na VPS (`server/ai_command_server/`, Flask) chamando a **API da Groq** (`llama-3.3-70b-versatile`, escolha do usuário, tier grátis) para interpretar frases que não batem nas regras locais rápidas, devolvendo ação estruturada em JSON. Autenticação via `firebase_admin.auth.verify_id_token` (reaproveita o `serviceAccountKey.json` do `sos_notifier.py`). App: nova dependência `http`, novo `lib/services/ai_command_service.dart` (`AiCommandService.interpretar`, timeout 6s, retorna `null` em qualquer falha), `_processarComando` tenta a IA antes do parser local (fallback automático offline). SOS continua 100% local, inalterado. **Bloqueado até ter domínio configurado** (`AiCommandService._baseUrl` é um placeholder) — ver seção "Backend de comando de voz por IA" acima. **Nota de segurança**: usuário colou uma API key da Groq em texto plano na conversa — precisa revogar e gerar uma nova antes do deploy. v1.4.1 (Flutter pronto; backend aguardando deploy) |

@@ -58,3 +58,5 @@ lib/firebase_options.dart
 *.jks
 *.keystore
 *.p12
+server/**/serviceAccountKey.json
+server/**/.env
