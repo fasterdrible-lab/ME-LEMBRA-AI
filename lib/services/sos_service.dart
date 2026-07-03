@@ -123,4 +123,16 @@ class SosService {
       _ligando = false;
     }
   }
+
+  /// Abre o discador do sistema com o número já preenchido, sem tentar
+  /// ligar automaticamente. Usado como confirmação manual de 1 toque
+  /// quando a ligação automática (callNumber) pode não completar por
+  /// motivos de rede/operadora fora do controle do app — é o mesmo
+  /// caminho de uma ligação discada à mão.
+  static Future<void> openDialer(String numero) async {
+    final clean = numero.replaceAll(RegExp(r'[^\d+]'), '');
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: clean);
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
 }

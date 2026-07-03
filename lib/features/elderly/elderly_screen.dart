@@ -300,20 +300,26 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
 
     if (!mounted) return;
     final numeros = await SettingsService.getSosNumeros();
-    if (numeros.length > 1 && mounted) {
+    if (numeros.isNotEmpty && mounted) {
+      // A ligação automática pode não completar por motivos fora do
+      // controle do app (rede/operadora). Esta tela garante um caminho
+      // manual de 1 toque para cada contato, usando o mesmo tipo de
+      // discagem que uma ligação digitada à mão (abre o discador já
+      // preenchido em vez de tentar ligar direto pelo app).
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Contatos adicionais',
+          title: const Text('Confirmar chamada de emergência',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          content: const Text('Ligar para outro contato de emergência?',
+          content: const Text(
+              'Se a ligação automática não completou, toque para ligar agora:',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 18)),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
-            ...numeros.skip(1).map((n) => Padding(
+            ...numeros.map((n) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: SizedBox(
                 width: double.infinity,
@@ -325,10 +331,10 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                     textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   icon: const Icon(Icons.phone, size: 26),
-                  label: Text(n),
+                  label: Text('LIGAR AGORA — $n'),
                   onPressed: () {
                     Navigator.pop(ctx);
-                    SosService.callNumber(n);
+                    SosService.openDialer(n);
                   },
                 ),
               ),

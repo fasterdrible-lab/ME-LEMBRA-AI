@@ -1,7 +1,10 @@
 package com.melembra.ai
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.telecom.TelecomManager
 import android.view.KeyEvent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -44,9 +47,7 @@ class MainActivity : FlutterActivity() {
                     val number = call.arguments as? String
                     if (!number.isNullOrBlank()) {
                         try {
-                            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))
-                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            startActivity(intent)
+                            placeCallReliable(number)
                             result.success(null)
                         } catch (e: Exception) {
                             result.error("CALL_FAILED", e.message, null)
@@ -101,6 +102,34 @@ class MainActivity : FlutterActivity() {
                 volumeSosEventSink = null
             }
         })
+    }
+
+    /**
+     * Liga usando TelecomManager.placeCall(), o caminho recomendado pelo Android
+     * para apps discarem sem passar pela tela do discador (UserCallActivity).
+     * Em alguns aparelhos/operadoras, uma chamada via Intent.ACTION_CALL
+     * disparada por app de terceiros é cancelada pelo próprio discador do
+     * fabricante poucos segundos depois de iniciar — placeCall() evita essa
+     * tela intermediária. Mantém o Intent.ACTION_CALL como fallback.
+     */
+    private fun placeCallReliable(number: String) {
+        val uri = Uri.fromParts("tel", number, null)
+        val temPermissao = checkSelfPermission(Manifest.permission.CALL_PHONE) ==
+            PackageManager.PERMISSION_GRANTED
+
+        if (temPermissao) {
+            try {
+                val telecomManager = getSystemService(TELECOM_SERVICE) as TelecomManager
+                telecomManager.placeCall(uri, null)
+                return
+            } catch (e: SecurityException) {
+                // cai para o Intent abaixo
+            }
+        }
+
+        val intent = Intent(Intent.ACTION_CALL, uri)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        startActivity(intent)
     }
 
     /**

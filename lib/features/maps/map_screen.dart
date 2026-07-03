@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../services/location_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/sos_service.dart';
 
 class MapScreen extends StatefulWidget {
@@ -82,6 +83,7 @@ class _MapScreenState extends State<MapScreen> {
           ),
         );
       }
+      await _mostrarConfirmacaoLigacao();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -91,6 +93,54 @@ class _MapScreenState extends State<MapScreen> {
     } finally {
       if (mounted) setState(() => _sosSending = false);
     }
+  }
+
+  /// A ligação automática pode não completar por motivos de rede/operadora
+  /// fora do controle do app. Mostra um caminho manual de 1 toque por
+  /// contato, usando o mesmo tipo de discagem de uma ligação digitada à mão.
+  Future<void> _mostrarConfirmacaoLigacao() async {
+    final numeros = await SettingsService.getSosNumeros();
+    if (numeros.isEmpty || !mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Confirmar chamada de emergência',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'Se a ligação automática não completou, toque para ligar agora:',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18)),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ...numeros.map((n) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _danger,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 58),
+                  textStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                icon: const Icon(Icons.phone, size: 26),
+                label: Text('LIGAR AGORA — $n'),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  SosService.openDialer(n);
+                },
+              ),
+            ),
+          )),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Fechar', style: TextStyle(fontSize: 18)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
