@@ -265,18 +265,27 @@ por aqui — continua 100% local no app.
 2. **Chave da Groq**: gerar uma **chave nova** no console da Groq
    (https://console.groq.com/keys) — a que apareceu na conversa foi exposta e
    deve ser revogada.
-3. **Deploy na VPS** (via SSH, `ssh root@204.168.180.25`):
+3. **Deploy na VPS** (via SSH, `ssh root@204.168.180.25`) — **atenção**: essa
+   VPS é compartilhada com outros projetos do usuário; `/root/sos_notifier/`
+   documentado abaixo **não existe nela** (o serviço de push do SOS nunca foi
+   implantado aqui de fato — lacuna de produção anterior a esta sessão, sem
+   relação com o backend de IA). Por isso o `serviceAccountKey.json` é um
+   arquivo **novo**, baixado direto do Firebase Console, não reaproveitado:
    ```bash
-   apt update && apt install -y nginx python3-pip certbot python3-certbot-nginx
+   apt update && apt install -y nginx certbot python3-certbot-nginx
 
    # copiar server/ai_command_server/ da máquina local para a VPS antes disto
    # (scp -r server/ai_command_server root@204.168.180.25:/root/ai_command_server)
+   # copiar também o serviceAccountKey.json baixado do Firebase Console para
+   # /root/ai_command_server/serviceAccountKey.json
    cd /root/ai_command_server
-   cp /root/sos_notifier/serviceAccountKey.json .
    cp .env.example .env
    nano .env   # colar a chave nova da Groq em GROQ_API_KEY
 
-   pip3 install -r requirements.txt
+   # Ubuntu 24.04 bloqueia "pip install" fora de venv (PEP 668)
+   python3 -m venv venv
+   venv/bin/pip install -r requirements.txt
+
    cp melembra-ai-backend.service /etc/systemd/system/
    systemctl daemon-reload
    systemctl enable melembra-ai-backend

@@ -10,10 +10,11 @@ se este serviço estiver fora do ar, o app cai sozinho no roteador local.
 O SOS nunca passa por aqui — continua 100% local no app, por segurança.
 
 Pré-requisitos:
-  pip install -r requirements.txt
-  Arquivo serviceAccountKey.json na mesma pasta (o mesmo usado pelo
-    sos_notifier.py — copiar da pasta dele ou baixar de novo no Firebase
-    Console → Configurações → Contas de serviço)
+  python3 -m venv venv && venv/bin/pip install -r requirements.txt
+    (Ubuntu 23.04+/Debian 12+ bloqueia "pip install" fora de venv — PEP 668)
+  Arquivo serviceAccountKey.json na mesma pasta (baixar no Firebase
+    Console → Configurações do projeto → Contas de serviço → Gerar nova
+    chave privada)
   Arquivo .env na mesma pasta com: GROQ_API_KEY=sua_chave_aqui
 
 Execução manual:
