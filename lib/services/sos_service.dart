@@ -16,6 +16,14 @@ class SosService {
   static final _db = FirebaseFirestore.instance;
   static const _callChannel = MethodChannel('com.melembra.ai/call');
 
+  // Evita duas ligações simultâneas: se o SOS for disparado por dois
+  // caminhos quase ao mesmo tempo (botão, voz, volume, detector de queda,
+  // toque duplo), o Telecom do Android cancela uma das chamadas
+  // sobrepostas — o que aparece pro usuário como falha aleatória/
+  // "número incorreto" mesmo com o número certo.
+  static bool _ligando = false;
+  static DateTime? _ultimaLigacao;
+
   /// Dispara o SOS. Retorna `true` se o registro foi criado com sucesso.
   static Future<bool> trigger({String? motivo}) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -92,15 +100,27 @@ class SosService {
     final digits = clean.replaceAll('+', '');
     if (digits.length < 10) return;
 
-    final status = await Permission.phone.request();
-    if (status.isGranted) {
-      try {
-        await _callChannel.invokeMethod('callNumber', clean);
-        return;
-      } catch (_) {}
+    if (_ligando) return;
+    final agora = DateTime.now();
+    if (_ultimaLigacao != null &&
+        agora.difference(_ultimaLigacao!) < const Duration(seconds: 10)) {
+      return;
     }
+    _ligando = true;
+    _ultimaLigacao = agora;
+    try {
+      final status = await Permission.phone.request();
+      if (status.isGranted) {
+        try {
+          await _callChannel.invokeMethod('callNumber', clean);
+          return;
+        } catch (_) {}
+      }
 
-    final uri = Uri(scheme: 'tel', path: clean);
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+      final uri = Uri(scheme: 'tel', path: clean);
+      if (await canLaunchUrl(uri)) await launchUrl(uri);
+    } finally {
+      _ligando = false;
+    }
   }
 }

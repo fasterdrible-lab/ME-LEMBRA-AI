@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.3.3+9` |
-| APK atual | `me-lembra-ai-v1.3.3.apk` — 63.9 MB |
+| Versão do app | `1.3.4+10` |
+| APK atual | `me-lembra-ai-v1.3.4.apk` — 63.9 MB |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
@@ -284,3 +284,4 @@ systemctl start sos-notifier
 | 13 | 2026-07-02 | Fix bug: número SOS obsoleto voltava após limpar a lista (`settings_service.dart`); validação de número antes de discar; `firestore.indexes.json` (índice composto `sos_alerts`) + tratamento de erro de stream em `sos_history_screen.dart`/`monitor_screen.dart` (tela não trava mais em loop); regra do Firestore corrigida para permitir `markViewed` (campo `viewedBy`); chat: botão único mic/enviar (`chat_screen.dart`) em vez de dois botões ambíguos. v1.3.1. **Pendente:** rodar `firebase deploy --only firestore:rules,firestore:indexes` em produção |
 | 13b | 2026-07-02 | Diagnóstico: número SOS "incorreto" era número salvo sem DDD (confirmado pois a rediscagem manual do mesmo número no histórico também falhava). Validação mínima subiu de 8 para 10 dígitos em `sos_service.dart`; `config_screen.dart` agora mostra aviso em vermelho no campo quando o número está incompleto. v1.3.2 |
 | 13c | 2026-07-02 | Debug via `adb logcat` no aparelho físico (R9QL200MJ0N) confirmou que a ligação em si funcionava (Telecom `Allowed`, chegou a `DIALING`); o "número incorreto" era o próprio número salvo com erro de digitação — confirmado pelo usuário testando o mesmo número direto no discador nativo. Bug real encontrado nessa investigação: o toggle "Botão de Pânico (SOS)" nunca era checado em `SosService.trigger()` — desativá-lo não impedia a ligação. Corrigido: `trigger()` agora retorna cedo se `SettingsService.getSos()` for `false`; `elderly_screen.dart` mostra aviso e não roda mais a contagem regressiva/voz quando o SOS está desativado. v1.3.3 |
+| 13d | 2026-07-02/03 | Usuário confirmou que o número (11940066219) está correto e às vezes funciona — erro intermitente, não número errado. Log mostrou `MAKE_ROOM_FOR_OUTGOING_CALLS` e disconnect REMOTE/SIP 487, condizente com duas ligações se sobrepondo. Causa: `SosService.callNumber()`/`trigger()` não tinham proteção contra chamadas concorrentes (botão, voz, 5 toques, volume e detector de queda podem todos acionar o mesmo fluxo). Corrigido: trava estática `_ligando` + cooldown de 10s em `sos_service.dart`; trava `_sosEmExecucao` em `elderly_screen.dart` (fluxo extraído para `_executarFluxoSOS()`). v1.3.4 |

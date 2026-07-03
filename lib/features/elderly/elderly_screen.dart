@@ -39,6 +39,7 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
   bool _sosDisparado = false;
+  bool _sosEmExecucao = false;
   String _mensagem = 'Bem-vindo!';
   String _textoReconhecido = '';
 
@@ -206,6 +207,11 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   }
 
   Future<void> _acionarSOS() async {
+    // Evita disparar duas contagens/ligações ao mesmo tempo se o SOS for
+    // acionado por mais de um caminho (botão, voz, toques, volume, queda)
+    // em rápida sucessão.
+    if (_sosEmExecucao) return;
+
     if (!await SettingsService.getSos()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -218,6 +224,15 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       return;
     }
 
+    _sosEmExecucao = true;
+    try {
+      await _executarFluxoSOS();
+    } finally {
+      _sosEmExecucao = false;
+    }
+  }
+
+  Future<void> _executarFluxoSOS() async {
     int contador = 5;
     Timer? timer;
     bool cancelado = false;
