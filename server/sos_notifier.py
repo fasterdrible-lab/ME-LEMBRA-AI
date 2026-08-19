@@ -2,16 +2,18 @@
 sos_notifier.py — Serviço VPS: envia FCM push para cuidadores ao disparar SOS.
 
 Pré-requisitos:
-  pip install firebase-admin
-  Arquivo serviceAccountKey.json na mesma pasta (baixar no Firebase Console)
+  python3 -m venv venv && venv/bin/pip install -r requirements.txt
+  (Ubuntu 24.04+ bloqueia pip fora de venv — PEP 668)
+  Arquivo serviceAccountKey.json na mesma pasta (baixar no Firebase Console,
+  ou reaproveitar o de server/ai_command_server/ se for o mesmo projeto)
 
 Execução manual:
-  python3 sos_notifier.py
+  venv/bin/python3 sos_notifier.py
 
 Execução como serviço systemd:
   Copiar sos-notifier.service para /etc/systemd/system/ e rodar:
-    systemctl enable sos-notifier
-    systemctl start sos-notifier
+    systemctl daemon-reload
+    systemctl enable --now sos-notifier
 """
 
 import logging
@@ -19,18 +21,31 @@ import os
 import sys
 import time
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 import firebase_admin
 from firebase_admin import credentials, firestore, messaging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("sos_notifier.log"),
-    ],
-)
+LOG_TZ = ZoneInfo("America/Sao_Paulo")
+
+
+class LocalTimeFormatter(logging.Formatter):
+    """Formata timestamps em America/Sao_Paulo — o servidor roda em UTC (Etc/UTC)."""
+
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=LOG_TZ)
+        if datefmt:
+            return dt.strftime(datefmt)
+        return dt.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+
+
+_formatter = LocalTimeFormatter("%(asctime)s [%(levelname)s] %(message)s")
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setFormatter(_formatter)
+_file_handler = logging.FileHandler("sos_notifier.log")
+_file_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=logging.INFO, handlers=[_stream_handler, _file_handler])
 log = logging.getLogger(__name__)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

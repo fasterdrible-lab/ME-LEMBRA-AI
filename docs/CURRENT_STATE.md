@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — Me Lembra Aí
 
-> Última atualização: 2026-07-03 (sessão 16)
+> Última atualização: 2026-08-19 (sessão 17)
 
 ---
 
@@ -170,7 +170,7 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 | Countdown 5 s antes de disparar SOS | Baixo | Não implementado |
 | Publicação na Play Store | Baixo | APK só em side-load |
 | VPS: reiniciar `sos-notifier.service` após novo `sos_notifier.py` | Operacional | Ver seção Deploy VPS |
-| **`sos_notifier.py` não está implantado na VPS de produção** | **Alto** | Descoberto na sessão 16: `/root/sos_notifier/` não existe em `204.168.180.25`, `systemctl status sos-notifier` não acha a unit. Push de SOS com app do familiar fechado provavelmente não funciona hoje, apesar de constar como concluído (sessão 5) — precisa de deploy real, seguindo os passos da seção "Deploy do sos_notifier.py no VPS" abaixo |
+| ~~`sos_notifier.py` não está implantado na VPS de produção~~ | ~~Alto~~ | ✅ Implantado de fato na sessão 17 — ver histórico de sessões abaixo |
 | Clone Git órfão em `/root/ME-LEMBRA-AI` na VPS, com segredos em arquivos não commitados | Médio | Descoberto na sessão 16, não tocado — precisa de autorização explícita antes de limpar |
 ~~Ligação automática do SOS cancelada pela rede/operadora (SIP 487)~~ | ~~Médio~~ | ✅ Corrigido na sessão 13f — faltava o código do país (+55) no número discado |
 
@@ -348,17 +348,26 @@ systemctl restart sos-notifier
 systemctl status sos-notifier
 ```
 
-Para instalação inicial:
+Para instalação inicial (Ubuntu 24.04 bloqueia `pip install` fora de venv — PEP 668,
+mesma lição do `ai_command_server`):
 
 ```bash
 mkdir -p /root/sos_notifier
-# Copiar server/* para /root/sos_notifier/
-# Baixar serviceAccountKey.json → Firebase Console → Configurações → Contas de serviço
-pip3 install -r /root/sos_notifier/requirements.txt
+# Copiar server/sos_notifier.py, requirements.txt, sos-notifier.service para /root/sos_notifier/
+# serviceAccountKey.json: reaproveitar /root/ai_command_server/serviceAccountKey.json
+#   se for o mesmo projeto Firebase, ou baixar um novo em
+#   Firebase Console → Configurações → Contas de serviço → Gerar nova chave privada
+python3 -m venv /root/sos_notifier/venv
+/root/sos_notifier/venv/bin/pip install -r /root/sos_notifier/requirements.txt
 cp /root/sos_notifier/sos-notifier.service /etc/systemd/system/
-systemctl enable sos-notifier
-systemctl start sos-notifier
+systemctl daemon-reload
+systemctl enable --now sos-notifier
+systemctl status sos-notifier --no-pager   # deve mostrar "Ouvindo sos_alerts criados após ..."
 ```
+
+> **Atenção:** o `ExecStart` da unit aponta para `/root/sos_notifier/venv/bin/python3`,
+> não `/usr/bin/python3` — sem isso o serviço falha ao importar `firebase_admin`
+> (não instalado no Python do sistema).
 
 ---
 
@@ -387,3 +396,4 @@ systemctl start sos-notifier
 | 14 | 2026-07-03 | Reformulação de UX do perfil Idoso: botão único "Falar Comando" absorve os antigos botões separados "Ouvir lembretes de hoje", "Criar lembrete por voz" e "Meus Alertas SOS" (removidos da tela). Novo roteador `_processarComando()` em `elderly_screen.dart` classifica a frase reconhecida por palavras-chave e decide a ação (ouvir lembretes / criar lembrete / adicionar item na lista / falar resumo de alertas), reaproveitando o parser de NLU já existente (`_parsearDataHora`, `_limparTitulo`, `_inferirTipo`, `_inferirRecorrencia`). "SOCORRO" continua com prioridade máxima a qualquer momento da escuta. Novo `_falarResumoAlertas()` lê em voz alta um resumo dos alertas SOS (via `SosFeedService`) em vez de abrir tela. Objetivo: minimizar necessidade de toque/digitação para o usuário idoso. v1.4.0 |
 | 15 | 2026-07-03 | Pedido do usuário: app "interagindo com o usuário" como um agente. Avaliado o framework Hermes Agent (não aplicável — é um agente de terminal, não conversa por voz num app mobile). Decidido: backend próprio na VPS (`server/ai_command_server/`, Flask) chamando a **API da Groq** (`llama-3.3-70b-versatile`, escolha do usuário, tier grátis) para interpretar frases que não batem nas regras locais rápidas, devolvendo ação estruturada em JSON. Autenticação via `firebase_admin.auth.verify_id_token` (reaproveita o `serviceAccountKey.json` do `sos_notifier.py`). App: nova dependência `http`, novo `lib/services/ai_command_service.dart` (`AiCommandService.interpretar`, timeout 6s, retorna `null` em qualquer falha), `_processarComando` tenta a IA antes do parser local (fallback automático offline). SOS continua 100% local, inalterado. **Bloqueado até ter domínio configurado** (`AiCommandService._baseUrl` é um placeholder) — ver seção "Backend de comando de voz por IA" acima. **Nota de segurança**: usuário colou uma API key da Groq em texto plano na conversa — precisa revogar e gerar uma nova antes do deploy. v1.4.1 (Flutter pronto; backend aguardando deploy) |
 | 16 | 2026-07-03 | Deploy real do backend de IA na VPS `204.168.180.25`. Domínio definido: `api.melbrai.com.br` (primeira tentativa usou domínio errado — `mylaassistente.com.br`, de outra aplicação do usuário — revertida antes de commitar). Backend rodando com sucesso na porta **8091** (trocada de 8001 por conflito com container Docker de outro projeto — VPS é compartilhada com vários outros projetos do usuário). Corrigido: venv Python (Ubuntu 24.04 bloqueia pip fora de venv, PEP 668), `serviceAccountKey.json` novo gerado no Firebase Console (não existia `/root/sos_notifier/` pra reaproveitar — descoberto que o `sos_notifier.py` nunca foi implantado nessa VPS de fato, apesar da documentação dizer o contrário — ver "Lacunas"). Confundido duas vezes `google-services.json` (config Android) com o `serviceAccountKey.json` (Admin SDK) até achar a aba certa no Firebase Console. **Dois vazamentos de segredo tratados**: chave da Groq (revogada e trocada) e um `GITHUB_TOKEN` que apareceu num `/root/.env` criado sem querer (apagado; token precisa ser revogado no GitHub se ainda não foi). Achado e não tocado: clone Git órfão em `/root/ME-LEMBRA-AI` com segredos soltos em arquivos não commitados — fica pra limpeza futura, com autorização explícita. **Pendente**: DNS do `melbrai.com.br` migrando pra Cloudflare (~45 min), registro A `api` ainda não confirmado, certificado HTTPS via certbot bloqueado até isso propagar. v1.4.2 (código sem mudança nesta sessão — só infraestrutura) |
+| 17 | 2026-08-19 | **`sos_notifier.py` implantado de verdade na VPS `204.168.180.25`**, fechando a lacuna descoberta na sessão 16. Acesso via SSH com senha (chaves SSH locais do usuário eram de outros projetos, nenhuma valia pra essa VPS). Reaproveitado `serviceAccountKey.json` de `/root/ai_command_server/` (mesmo projeto Firebase `me-lembra-ai-bf0f0`) — não precisou gerar chave nova. Aplicada a mesma lição da sessão 16: venv Python (`python3 -m venv` + `venv/bin/pip install -r requirements.txt`), já que Ubuntu 24.04 bloqueia pip fora de venv (PEP 668) — `sos-notifier.service` (local e remoto) corrigido para apontar `ExecStart` pro `venv/bin/python3` em vez de `/usr/bin/python3`. Serviço ativado via `systemctl enable --now sos-notifier`, confirmado `active (running)` com log `Ouvindo sos_alerts criados após ...`. Nesta sessão também foi criado o **Hermes Dev** (`server/hermes_dev/` + `.claude/agents/hermes-*.md` + `.claude/skills/hermes-dev/`) — Fase 1 de um sistema de manutenção autônoma supervisionada pro código do app, separado do Hermes Produto (avaliado e descartado na sessão 15); ver `server/hermes_dev/README.md`. v1.4.2 (código do app sem mudança — infraestrutura + tooling de desenvolvimento) |
