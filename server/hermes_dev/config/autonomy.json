@@ -1,0 +1,10 @@
+{
+  "AUTONOMY_LEVEL": "assisted",
+  "levels": {
+    "manual": "Hermes investiga e propõe alteração; aguarda autorização antes de criar branch/worktree ou editar qualquer arquivo.",
+    "assisted": "Hermes pode investigar, criar branch/worktree, corrigir, testar e revisar sozinho. NUNCA pode: git push, git merge, firebase deploy, ou qualquer criação real de PR remoto sem confirmação explícita do usuário nesta conversa.",
+    "autonomous": "NÃO IMPLEMENTADO nesta fase. Reservado para o futuro, apenas para risco LOW/MEDIUM, e mesmo assim sem merge automático de HIGH/CRITICAL, sem deploy de produção e sem alteração de SOS/Firestore Rules/Firebase Auth."
+  },
+  "default": "assisted",
+  "note": "Este arquivo é lido pelo skill /hermes-dev no início de cada execução. Trocar AUTONOMY_LEVEL para 'manual' se quiser aprovar cada etapa manualmente."
+}
