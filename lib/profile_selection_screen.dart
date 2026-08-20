@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'services/fcm_service.dart';
 import 'services/profile_service.dart';
 
 class ProfileSelectionScreen extends StatefulWidget {
@@ -29,6 +30,11 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
 
   Future<void> _goToProfile(String perfil) async {
     if (!mounted) return;
+    // BUG-001: login/cadastro chegam aqui e vao direto para a tela do
+    // perfil, sem nunca construir a HomeScreen nesta sessao — por isso o
+    // FCM precisa ser inicializado tambem neste ponto (fire-and-forget,
+    // igual ao HomeScreen.initState, e seguro chamar de novo depois).
+    FcmService.init();
     Navigator.pushReplacementNamed(context, _routeForProfile(perfil));
   }
 
