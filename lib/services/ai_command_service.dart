@@ -1,7 +1,16 @@
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+/// Uma troca (usuário + assistente) já concluída na conversa atual.
+/// Usada para dar memória de curto prazo ao backend de IA entre turnos.
+class ConversaTurno {
+  final String usuario;
+  final String assistente;
+  const ConversaTurno(this.usuario, this.assistente);
+}
 
 /// Ação estruturada devolvida pelo backend de comando de voz por IA.
 class ComandoAction {
@@ -50,11 +59,21 @@ class AiCommandService {
   // para o passo a passo de deploy (DNS, systemd, nginx, certbot).
   static const String _baseUrl = 'https://api.melbrai.com.br';
 
-  static Future<ComandoAction?> interpretar(String texto) async {
+  static Future<ComandoAction?> interpretar(
+    String texto, {
+    List<ConversaTurno> historico = const [],
+    List<Map<String, dynamic>> lembretesContexto = const [],
+  }) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return null;
       final idToken = await user.getIdToken();
+
+      // Defesa extra além do cap que quem chama já deve manter — nunca
+      // manda mais que as últimas 3 trocas pro backend.
+      final historicoLimitado = historico.length > 3
+          ? historico.sublist(historico.length - 3)
+          : historico;
 
       final response = await http
           .post(
@@ -67,16 +86,29 @@ class AiCommandService {
               'texto': texto,
               'contexto': {
                 'agora': DateTime.now().toIso8601String(),
+                'lembretes': lembretesContexto,
               },
+              'historico': historicoLimitado
+                  .map((t) => {'usuario': t.usuario, 'assistente': t.assistente})
+                  .toList(),
             }),
           )
           .timeout(const Duration(seconds: 6));
 
-      if (response.statusCode != 200) return null;
+      if (response.statusCode != 200) {
+        debugPrint(
+            'AiCommandService: backend respondeu ${response.statusCode} — '
+            'caindo no parser local. Corpo: ${response.body}');
+        return null;
+      }
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       return ComandoAction.fromJson(json);
-    } catch (_) {
-      // Sem internet, timeout, backend fora do ar, etc. — cai no fallback local.
+    } catch (e) {
+      // Sem internet, timeout, backend fora do ar, certificado TLS
+      // inválido, etc. — cai no fallback local. Logado para diagnóstico
+      // (ver docs/CURRENT_STATE.md, seção do backend de IA).
+      debugPrint('AiCommandService: falha ao interpretar comando ($e) — '
+          'caindo no parser local.');
       return null;
     }
   }

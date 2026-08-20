@@ -55,13 +55,14 @@ log = logging.getLogger(__name__)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SERVICE_ACCOUNT_PATH = os.path.join(SCRIPT_DIR, "serviceAccountKey.json")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
 
 ACOES_VALIDAS = {
     "criar_lembrete",
     "ouvir_lembretes",
     "adicionar_item_lista",
     "consultar_alertas",
+    "perguntar",
     "responder",
 }
 
@@ -71,12 +72,15 @@ TIPOS_VALIDOS = {
 
 RECORRENCIAS_VALIDAS = {"unico", "diario", "semanal"}
 
+MAX_HISTORICO_TROCAS = 3
+
 SYSTEM_PROMPT = """Você interpreta comandos de voz em português de um app de \
-lembretes para uma pessoa idosa. Responda SEMPRE em JSON puro (sem texto \
-fora do JSON), seguindo exatamente este formato:
+lembretes para uma pessoa idosa, dentro de uma conversa que pode ter várias \
+falas seguidas (não é só uma pergunta e resposta isolada). Responda SEMPRE \
+em JSON puro (sem texto fora do JSON), seguindo exatamente este formato:
 
 {
-  "acao": "criar_lembrete" | "ouvir_lembretes" | "adicionar_item_lista" | "consultar_alertas" | "responder",
+  "acao": "criar_lembrete" | "ouvir_lembretes" | "adicionar_item_lista" | "consultar_alertas" | "perguntar" | "responder",
   "titulo": "string, só para criar_lembrete",
   "tipo": "Remedio" | "Consulta" | "Aniversario" | "Mercado" | "Reuniao" | "Tomar" | "Compras",
   "data_hora": "ISO 8601 completo, ex: 2026-07-03T08:00:00, só para criar_lembrete",
@@ -86,13 +90,17 @@ fora do JSON), seguindo exatamente este formato:
 }
 
 Regras:
-- "criar_lembrete": quando a pessoa pede para lembrar de algo em um horário/data. Use o "agora" fornecido no contexto para calcular data_hora relativa (ex: "amanhã", "daqui a uma hora").
+- "criar_lembrete": quando a pessoa pede para lembrar de algo em um horário/data JÁ CLARO na frase (ou dedutível do "agora" fornecido, ex.: "amanhã", "daqui a uma hora"). Se faltar informação essencial (por exemplo, não disse quando), NÃO invente um horário — use "perguntar" em vez disso.
 - "ouvir_lembretes": quando pede para ouvir/saber os lembretes do dia.
 - "adicionar_item_lista": quando pede para adicionar item(ns) na lista de compras/mercado. Preencha "itens".
 - "consultar_alertas": quando pergunta sobre alertas de SOS enviados.
-- "responder": para qualquer outra coisa (conversa, pergunta geral, algo que não é uma ação do app). Preencha "fala" com uma resposta curta, gentil e direta.
+- "perguntar": quando o pedido está ambíguo ou incompleto para ser executado com segurança (ex.: pediu para criar um lembrete mas não disse a hora, ou não ficou claro qual item da lista). Preencha "fala" com UMA pergunta curta e específica para esclarecer — nunca confirme uma ação nem invente o dado que falta.
+- "responder": para conversa livre, pergunta geral sobre os lembretes/dados fornecidos no contexto, ou qualquer coisa que não é uma ação do app. Preencha "fala" com uma resposta curta, gentil e direta, baseada SOMENTE no que está no contexto — nunca invente lembretes, horários, alertas ou dados que não foram te passados.
+- Você recebe em "Lembretes cadastrados" a lista real dos lembretes do usuário (título, tipo, data/hora). Use SOMENTE essa lista para responder perguntas sobre lembretes existentes (ex.: "o que eu tenho hoje?", "eu já tenho consulta marcada?"). Se a lista não trouxer o que foi perguntado, diga que não encontrou — não invente um item "para ser útil".
+- Você pode receber um histórico das últimas trocas da conversa. Use-o para entender continuidade (ex.: uma resposta curta do usuário a uma pergunta sua de "perguntar" anterior), mas aplique as mesmas regras acima a cada novo comando — não repita uma ação já executada em um turno anterior.
 - Omita campos que não se aplicam à ação escolhida (não precisa incluir com valor vazio).
 - Nunca invente que disparou um SOS ou uma ligação de emergência — isso não é controlado por você.
+- Nunca invente lembretes, alertas, itens de lista ou qualquer outro dado que não esteja explicitamente no contexto fornecido ou na frase do usuário. Na dúvida, pergunte ou diga que não sabe — não adivinhe.
 """
 
 
@@ -123,6 +131,10 @@ class ComandoAction:
         itens_raw = raw.get("itens") or []
         itens = [str(i).strip() for i in itens_raw if str(i).strip()] if isinstance(itens_raw, list) else []
 
+        fala = str(raw.get("fala") or "").strip()
+        if not fala and acao in ("responder", "perguntar"):
+            fala = "Pode repetir, por favor?"
+
         return ComandoAction(
             acao=acao,
             titulo=(str(raw["titulo"]).strip() if raw.get("titulo") else None),
@@ -130,7 +142,7 @@ class ComandoAction:
             data_hora=(str(raw["data_hora"]) if raw.get("data_hora") else None),
             recorrencia=recorrencia,
             itens=itens,
-            fala=str(raw.get("fala") or "").strip(),
+            fala=fala,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -178,8 +190,55 @@ app = Flask(__name__)
 limiter = Limiter(
     app=app,
     key_func=lambda: getattr(request, "uid_autenticado", None) or request.remote_addr,
-    default_limits=["100 per day", "20 per hour"],
+    # 60/hora (antes 20/hora): uma conversa multi-turno gera várias
+    # requisições em vez de uma só por comando.
+    default_limits=["100 per day", "60 per hour"],
 )
+
+
+def _formatar_lembretes(lembretes: list[Any]) -> str:
+    if not lembretes:
+        return "Nenhum lembrete cadastrado."
+    linhas = []
+    for item in lembretes[:20]:
+        if not isinstance(item, dict):
+            continue
+        titulo = str(item.get("titulo") or "").strip()
+        tipo = str(item.get("tipo") or "").strip()
+        data_hora = str(item.get("data_hora") or "").strip()
+        if not titulo:
+            continue
+        linha = f"- {titulo} ({tipo}) em {data_hora}"
+        itens_raw = item.get("itens")
+        if isinstance(itens_raw, list) and itens_raw:
+            itens = ", ".join(str(i).strip() for i in itens_raw if str(i).strip())
+            if itens:
+                linha += f" — itens: {itens}"
+        linhas.append(linha)
+    return "\n".join(linhas) if linhas else "Nenhum lembrete cadastrado."
+
+
+def _montar_mensagens(
+    agora: str, lembretes: list[Any], historico: list[Any], texto: str
+) -> list[dict]:
+    mensagens = [{"role": "system", "content": SYSTEM_PROMPT}]
+    trocas = historico[-MAX_HISTORICO_TROCAS:] if isinstance(historico, list) else []
+    for troca in trocas:
+        if not isinstance(troca, dict):
+            continue
+        usuario = str(troca.get("usuario") or "").strip()
+        assistente = str(troca.get("assistente") or "").strip()
+        if usuario:
+            mensagens.append({"role": "user", "content": usuario})
+        if assistente:
+            mensagens.append({"role": "assistant", "content": assistente})
+    contexto_texto = (
+        f"Agora é: {agora}\n"
+        f"Lembretes cadastrados:\n{_formatar_lembretes(lembretes)}\n"
+        f"Comando: {texto}"
+    )
+    mensagens.append({"role": "user", "content": contexto_texto})
+    return mensagens
 
 
 @app.route("/interpretar-comando", methods=["POST"])
@@ -196,16 +255,16 @@ def interpretar_comando():
 
     contexto = body.get("contexto") or {}
     agora = contexto.get("agora", "")
+    lembretes = contexto.get("lembretes") or []
+    historico = body.get("historico") or []
 
     try:
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             response_format={"type": "json_object"},
             max_tokens=400,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Agora é: {agora}\nComando: {texto}"},
-            ],
+            temperature=0.2,
+            messages=_montar_mensagens(agora, lembretes, historico, texto),
         )
         raw = json.loads(completion.choices[0].message.content)
         acao = ComandoAction.from_raw(raw)

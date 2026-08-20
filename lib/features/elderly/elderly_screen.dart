@@ -46,6 +46,14 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   String _capturaComando = '';
   bool _comandoProcessado = false;
 
+  // Assistente conversacional (Falar Comando): memória curta da conversa
+  // atual e contador de turnos, para permitir várias trocas seguidas sem
+  // precisar tocar o botão de novo a cada frase.
+  final List<ConversaTurno> _historicoConversa = [];
+  int _turnosConversa = 0;
+  static const int _maxTurnosConversa = 6;
+  static const int _maxHistoricoTrocas = 3;
+
   // SOS por toques: 5 toques em 3 s
   final List<DateTime> _tapTimes = [];
 
@@ -173,9 +181,18 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     if (_isListening) {
       await _speech.stop();
       setState(() => _isListening = false);
+      _encerrarConversa();
       return;
     }
+    // Todo toque manual no botão começa uma conversa do zero.
+    _encerrarConversa();
+    await _iniciarEscuta();
+  }
 
+  /// Abre o microfone por um turno. Chamado tanto pelo toque no botão
+  /// quanto automaticamente ao final de cada turno da conversa, pra deixar
+  /// o assistente escutando a próxima fala sem precisar tocar de novo.
+  Future<void> _iniciarEscuta() async {
     final disponivel = await _speech.initialize(
       onStatus: (status) {
         if ((status == 'done' || status == 'notListening') && _isListening) {
@@ -202,8 +219,11 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
 
     _speech.listen(
       localeId: 'pt_BR',
-      listenFor: const Duration(seconds: 12),
-      pauseFor: const Duration(seconds: 3),
+      // Tempos generosos: usuários idosos costumam falar com pausas entre
+      // palavras, e um pauseFor curto corta a frase no meio (ex.:
+      // "adicionar carne ao" sem "mercado" — confirmado em log real).
+      listenFor: const Duration(seconds: 25),
+      pauseFor: const Duration(seconds: 6),
       onResult: (result) {
         _capturaComando = result.recognizedWords;
         setState(() {
@@ -212,12 +232,14 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
         });
 
         // SOCORRO tem prioridade máxima: dispara na hora, sem esperar
-        // terminar de entender o resto do comando.
+        // terminar de entender o resto do comando, mesmo no meio de uma
+        // conversa com o assistente.
         if (_capturaComando.toUpperCase().contains('SOCORRO') && !_sosDisparado) {
           _sosDisparado = true;
           _comandoProcessado = true;
           _speech.stop();
           if (mounted) setState(() => _isListening = false);
+          _encerrarConversa();
           _acionarSOS();
           Future<void>.delayed(const Duration(seconds: 10), () {
             if (mounted) _sosDisparado = false;
@@ -238,50 +260,133 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     _processarComando(_capturaComando);
   }
 
+  /// Detecta frases de encerramento da conversa ("obrigado", "pode parar",
+  /// "só isso", "tchau"...) — checagem local instantânea, mesmo padrão da
+  /// checagem de SOCORRO, nunca passa pela IA.
+  bool _ehFraseDeEncerramento(String texto) {
+    final t = texto.toLowerCase();
+    const frases = [
+      'obrigado', 'obrigada', 'pode parar', 'só isso', 'so isso',
+      'é só', 'e so', 'tchau', 'até mais', 'ate mais',
+      'chega', 'terminei', 'pode encerrar', 'finalizar',
+    ];
+    return frases.any((f) => t.contains(f));
+  }
+
+  /// Reseta o estado da conversa multi-turno (histórico + contador de
+  /// turnos). Chamado ao encerrar por frase, por silêncio, pelo limite de
+  /// turnos, por toque manual de parada, ou por SOCORRO.
+  void _encerrarConversa() {
+    _historicoConversa.clear();
+    _turnosConversa = 0;
+  }
+
+  /// Monta um resumo leve dos lembretes (título/tipo/data-hora, nunca o
+  /// documento completo) para dar contexto real à IA e evitar alucinação.
+  /// Para lembretes de "Compras", inclui também a descrição (é lá que
+  /// ficam os itens da lista) — sem isso a IA sabe que a lista existe mas
+  /// não o que tem dentro, e não consegue responder "o que tem na minha
+  /// lista?" sem inventar.
+  Future<List<Map<String, dynamic>>> _lembretesParaContextoIA() async {
+    try {
+      final todos = await ReminderService.getAll();
+      final agora = DateTime.now();
+      final relevantes = todos
+          .where((r) =>
+              r.dateTime.isAfter(agora.subtract(const Duration(days: 1))))
+          .toList()
+        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      return relevantes
+          .take(15)
+          .map((r) => {
+                'titulo': r.title.isNotEmpty ? r.title : r.type,
+                'tipo': r.type,
+                'data_hora': r.dateTime.toIso8601String(),
+                if (r.type == 'Compras' && r.description.trim().isNotEmpty)
+                  'itens': r.description.trim().split('\n'),
+              })
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   /// Interpreta o comando reconhecido e decide a ação: ouvir lembretes,
   /// checar alertas SOS, adicionar item na lista de compras, ou (padrão)
-  /// criar um lembrete novo a partir da frase.
+  /// criar um lembrete novo a partir da frase. Ao final, se a conversa não
+  /// tiver sido encerrada, volta a escutar sozinho pro próximo turno.
   Future<void> _processarComando(String raw) async {
     if (!mounted) return;
     final texto = raw.trim();
     if (texto.isEmpty) {
+      // O STT às vezes reporta "done"/"notListening" (texto ainda vazio)
+      // um instante antes de entregar o resultado de verdade — inclusive
+      // "SOCORRO". Uma pequena espera evita falar "não entendi" por cima
+      // de uma emergência que está prestes a ser reconhecida.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (!mounted || _sosDisparado) return;
       await _falar('Não entendi. Toque em Falar Comando e tente de novo.');
+      _encerrarConversa();
       return;
     }
+    debugPrint('ElderlyScreen: comando reconhecido: "$texto"');
+
+    // Frase de encerramento: checagem 100% local e instantânea (mesmo
+    // padrão da checagem de SOCORRO), nunca passa pela IA.
+    if (_ehFraseDeEncerramento(texto)) {
+      await _falar('Até logo!');
+      _encerrarConversa();
+      return;
+    }
+
+    _turnosConversa++;
     final t = texto.toLowerCase();
 
     final pedeOuvirLembretes = t.contains('lembrete') &&
         (t.contains('ouvir') || t.contains('ler') || t.contains('quais') ||
             t.contains('que lembretes') || t.contains('tenho lembrete'));
-    if (pedeOuvirLembretes) {
-      await _lerLembretesDoDia();
-      return;
-    }
-
     final pedeAlertas = t.contains('alerta') ||
         (t.contains('sos') &&
             (t.contains('meus') || t.contains('histórico') || t.contains('historico')));
-    if (pedeAlertas) {
+
+    if (pedeOuvirLembretes) {
+      await _lerLembretesDoDia();
+    } else if (pedeAlertas) {
       await _falarResumoAlertas();
-      return;
-    }
-
-    if (_isAdicionarNaLista(texto)) {
+    } else if (_isAdicionarNaLista(texto)) {
       await _adicionarItemNaListaDeCompras(texto);
-      return;
+    } else {
+      // Frase fora dos atalhos locais: tenta interpretar com IA (backend
+      // próprio, que chama a Groq), passando histórico da conversa e um
+      // resumo dos lembretes reais pra ela não inventar dado. Se não
+      // conseguir (sem internet, backend fora do ar, timeout de ~6s), cai
+      // no parser local de sempre.
+      final lembretesContexto = await _lembretesParaContextoIA();
+      final acaoIA = await AiCommandService.interpretar(
+        texto,
+        historico: List.unmodifiable(_historicoConversa),
+        lembretesContexto: lembretesContexto,
+      );
+      if (acaoIA != null) {
+        await _executarAcaoIA(acaoIA);
+        _historicoConversa.add(ConversaTurno(texto, acaoIA.fala));
+        if (_historicoConversa.length > _maxHistoricoTrocas) {
+          _historicoConversa.removeAt(0);
+        }
+      } else {
+        // Padrão (sem IA disponível): trata como pedido de criar lembrete.
+        await _criarLembreteDoTexto(texto);
+      }
     }
 
-    // Frase fora dos atalhos locais: tenta interpretar com IA (backend
-    // próprio, que chama a Groq). Se não conseguir (sem internet, backend
-    // fora do ar, timeout de ~6s), cai no parser local de sempre.
-    final acaoIA = await AiCommandService.interpretar(texto);
-    if (acaoIA != null) {
-      await _executarAcaoIA(acaoIA);
+    if (!mounted) return;
+    if (_turnosConversa >= _maxTurnosConversa) {
+      await _falar(
+          'Vamos continuar depois. Toque em Falar Comando de novo quando quiser.');
+      _encerrarConversa();
       return;
     }
-
-    // Padrão (sem IA disponível): trata como pedido de criar lembrete.
-    await _criarLembreteDoTexto(texto);
+    await _iniciarEscuta();
   }
 
   /// Executa a ação estruturada devolvida pelo backend de IA.
@@ -303,6 +408,7 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       case 'criar_lembrete':
         await _criarLembreteDeAcao(acao);
         break;
+      case 'perguntar':
       case 'responder':
       default:
         await _falar(acao.fala.isNotEmpty ? acao.fala : 'Não entendi. Pode repetir?');
@@ -611,6 +717,10 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   /// Infere o tipo (category) a partir do texto.
   String _inferirTipo(String texto) {
     final t = texto.toLowerCase();
+    // "tomar água" é categoria própria ("Tomar", seção de água em
+    // meus_lembretes_screen.dart) — checar antes do "tomar" genérico
+    // abaixo, que por padrão vira remédio.
+    if (t.contains('água') || t.contains('agua')) return 'Tomar';
     if (t.contains('remédio') || t.contains('remedio') ||
         t.contains('medicamento') || t.contains('comprimido') ||
         t.contains('tomar')) return 'Remedio';
@@ -625,7 +735,10 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     if (t.contains('consulta') || t.contains('médico') ||
         t.contains('medico') || t.contains('dentista') ||
         t.contains('exame')) return 'Consulta';
-    return 'Remedio';
+    // Nenhuma categoria reconhecida: não assume "Remédio" (lista sensível,
+    // usada pra medicação real) — cai em "Lembrete" genérico (seção
+    // "Outros" em meus_lembretes_screen.dart).
+    return 'Lembrete';
   }
 
   /// Para compras, extrai itens ("comprar leite, pão e arroz" → linhas).
@@ -650,11 +763,16 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   bool _isAdicionarNaLista(String texto) {
     final t = texto.toLowerCase();
     final temVerbo = t.contains('adicionar') || t.contains('adiciona') ||
+        t.contains('adicione') ||
         t.contains('colocar') || t.contains('coloca') ||
+        t.contains('coloque') ||
         t.contains('incluir') || t.contains('inclui') ||
+        t.contains('inclua') ||
         t.contains('botar') || t.contains('bota') ||
-        t.contains('acrescentar') || t.contains('põe') ||
-        t.contains('poe');
+        t.contains('bote') ||
+        t.contains('acrescentar') || t.contains('acrescenta') ||
+        t.contains('acrescente') ||
+        t.contains('põe') || t.contains('poe') || t.contains('ponha');
     final temLista = t.contains('lista') || t.contains('compra') ||
         t.contains('mercado');
     return temVerbo && temLista;
@@ -665,18 +783,38 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     var t = texto.toLowerCase();
     // Remove o verbo inicial
     for (final v in [
-      'acrescentar ', 'adicionar ', 'adiciona ', 'colocar ', 'coloca ',
-      'incluir ', 'inclui ', 'botar ', 'bota ', 'põe ', 'poe ',
+      'acrescentar ', 'acrescenta ', 'acrescente ',
+      'adicionar ', 'adiciona ', 'adicione ',
+      'colocar ', 'coloca ', 'coloque ',
+      'incluir ', 'inclui ', 'inclua ',
+      'botar ', 'bota ', 'bote ',
+      'põe ', 'poe ', 'ponha ',
     ]) {
       final idx = t.indexOf(v);
       if (idx >= 0) { t = t.substring(idx + v.length); break; }
     }
-    // Remove destino "na / à / a minha lista (de compras)" e variações
+    // Remove destino "na / à / a / pra / para (a) minha lista (de compras)",
+    // "no / ao / pro mercado" e variações — cobre os jeitos mais comuns de
+    // falar isso em português, já que o reconhecimento de voz às vezes
+    // recorta preposições de forma diferente do esperado.
     t = t
-        .replaceAll(RegExp(r'\s+(n[ao]|à|a)\s+minha\s+lista.*', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s+(n[ao]|à|a)\s+lista.*', caseSensitive: false), '')
+        .replaceAll(
+            RegExp(r'\s+(n[ao]|à|a|pra|para\s+a|para\s+o)\s+minha\s+lista.*',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'\s+(n[ao]|à|a|pra|para\s+a|para\s+o)\s+lista.*',
+                caseSensitive: false),
+            '')
         .replaceAll(RegExp(r'\s+de\s+compras.*', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s+no\s+mercado.*', caseSensitive: false), '')
+        .replaceAll(
+            RegExp(r'\s+(n[ao]|ao|pro|para\s+o)\s+mercado.*',
+                caseSensitive: false),
+            '')
+        .replaceAll(
+            RegExp(r'\s+(n[ao]|ao|pro|para\s+o)\s+supermercado.*',
+                caseSensitive: false),
+            '')
         .trim();
     // Separa por vírgula ou " e "
     return t
@@ -705,13 +843,14 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     final userId = FirebaseAuth.instance.currentUser!.uid;
     final perfil = await ProfileService.getProfile() ?? '';
 
-    // Busca lembrete de Compras já existente
+    // Busca lembrete de Compras já existente — só pelo tipo exato
+    // ('Compras', usado por este mesmo fluxo), nunca por texto solto no
+    // título: um lembrete qualquer com "mercado"/"compra" no título (ex.:
+    // um mal-interpretado pelo parser local) não deve virar a lista.
     final todos = await ReminderService.getAll();
     Reminder? listaExistente;
     for (final r in todos) {
-      final t = '${r.title} ${r.type}'.toLowerCase();
-      if (t.contains('compra') || t.contains('mercado') ||
-          t.contains('supermercado') || r.type == 'Compras') {
+      if (r.type == 'Compras') {
         listaExistente = r;
         break;
       }
