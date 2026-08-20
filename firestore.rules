@@ -69,7 +69,10 @@ service cloud.firestore {
       allow read: if participates();
       allow create: if participates()
         && request.resource.data.senderUid == request.auth.uid;
-      allow update, delete: if false;
+      // Só quem enviou pode excluir a própria mensagem.
+      allow delete: if participates()
+        && resource.data.senderUid == request.auth.uid;
+      allow update: if false;
     }
   }
 }

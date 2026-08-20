@@ -91,7 +91,8 @@ class ChatService {
     final pid = pairId(me.uid, otherUid);
     final filename = '${DateTime.now().millisecondsSinceEpoch}.m4a';
     final ref = _storage.ref('chats/$pid/$filename');
-    await ref.putFile(file);
+    // contentType precisa começar com "audio/" — exigido por storage.rules.
+    await ref.putFile(file, SettableMetadata(contentType: 'audio/mp4'));
     final url = await ref.getDownloadURL();
     await _messages(otherUid).add({
       'senderUid': me.uid,
@@ -101,5 +102,21 @@ class ChatService {
       'durationMs': durationMs ?? 0,
       'sentAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Exclui uma mensagem (só o remetente pode, ver firestore.rules). Se for
+  /// áudio, tenta remover o arquivo do Storage também (melhor esforço — não
+  /// falha a exclusão da mensagem se o arquivo já não existir).
+  static Future<void> deleteMessage(
+    String otherUid,
+    String messageId, {
+    String? audioUrl,
+  }) async {
+    if (audioUrl != null) {
+      try {
+        await _storage.refFromURL(audioUrl).delete();
+      } catch (_) {}
+    }
+    await _messages(otherUid).doc(messageId).delete();
   }
 }

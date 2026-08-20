@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Storage do Chat Familiar: cada arquivo de áudio fica em
+// chats/{pairId}/{filename}, onde pairId é a concatenação ordenada dos
+// dois UIDs dos participantes (mesmo esquema de firestore.rules).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /chats/{pairId}/{filename} {
+      function participates() {
+        return request.auth != null
+          && pairId.matches('.*' + request.auth.uid + '.*');
+      }
+
+      allow read: if participates();
+      allow write: if participates()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('audio/.*');
+      allow delete: if participates();
+    }
+
+    // Qualquer outro caminho: bloqueado por padrão.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
