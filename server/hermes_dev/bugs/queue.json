@@ -1,5 +1,0 @@
-{
-  "description": "Bug Queue (TAREFA 21). Cada entrada tem bug_id, severidade, risco, branch/worktree, status, datas, arquivos, testes, PR. Estados possíveis: NEW, TRIAGING, REPRODUCING, FIXING, TESTING, REVIEWING, READY_FOR_PR, WAITING_HUMAN, CLOSED, FAILED.",
-  "next_seq": 1,
-  "bugs": []
-}
