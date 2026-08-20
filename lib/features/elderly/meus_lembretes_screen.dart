@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/reminder.dart';
@@ -246,14 +247,26 @@ class _MeusLembretesScreenState extends State<MeusLembretesScreen> {
     );
   }
 
+  // ── Formatação de data/horário (Hoje / Amanhã / dd/MM) ─────────────────────
+
+  String _formatarDataHora(DateTime dt) {
+    final hora = DateFormat('HH:mm').format(dt);
+    final hoje = DateTime.now();
+    final data = DateTime(dt.year, dt.month, dt.day);
+    final hojeData = DateTime(hoje.year, hoje.month, hoje.day);
+    final diferenca = data.difference(hojeData).inDays;
+    if (diferenca == 0) return 'Hoje · $hora';
+    if (diferenca == 1) return 'Amanhã · $hora';
+    return '${DateFormat('dd/MM/yyyy').format(dt)} · $hora';
+  }
+
   // ── Item simples com check animado e swipe para excluir ───────────────────
 
   Widget _itemSimples(Reminder r, Color catColor) {
     final titulo = r.title.isNotEmpty ? r.title : r.type;
     final doneKey = 'done_${r.id}_$_hojeKey';
     final done = _done[doneKey] ?? false;
-    final h = r.dateTime.hour.toString().padLeft(2, '0');
-    final m = r.dateTime.minute.toString().padLeft(2, '0');
+    final dataHora = _formatarDataHora(r.dateTime);
 
     return Dismissible(
       key: Key('item_${r.id}'),
@@ -313,7 +326,7 @@ class _MeusLembretesScreenState extends State<MeusLembretesScreen> {
           ),
           subtitle: Row(
             children: [
-              Text('$h:$m',
+              Text(dataHora,
                   style: const TextStyle(fontSize: 14, color: Colors.black45)),
               const SizedBox(width: 8),
               _repeatChip(r),
@@ -636,6 +649,7 @@ class _MeusLembretesScreenState extends State<MeusLembretesScreen> {
     final aniversarios = _filtrar('aniversario');
     final mercado = _filtrar('mercado');
     final eventos = _filtrar('evento');
+    final tomar = _filtrar('tomar');
     final outros = _outros;
 
     // Badge = pendentes (não confirmados hoje)
@@ -681,14 +695,21 @@ class _MeusLembretesScreenState extends State<MeusLembretesScreen> {
                   ),
 
                   // ── Tomar Água ────────────────────────────────
+                  // Contador de copos + lembretes com horário específico
+                  // (categoria "Tomar", ex.: criados na tela Adicionar).
                   _secao(
                     icon: Icons.water_drop,
                     color: const Color(0xFF29B6F6),
                     titulo: 'Tomar Água',
-                    badge: _metaAgua - _coposAgua > 0
-                        ? _metaAgua - _coposAgua
-                        : 0,
-                    items: [_aguaWidget()],
+                    badge: (_metaAgua - _coposAgua > 0
+                            ? _metaAgua - _coposAgua
+                            : 0) +
+                        pendentes(tomar),
+                    items: [
+                      _aguaWidget(),
+                      ...tomar.map(
+                          (r) => _itemSimples(r, const Color(0xFF29B6F6))),
+                    ],
                   ),
 
                   // ── Consultas ─────────────────────────────────
