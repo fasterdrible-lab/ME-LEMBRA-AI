@@ -35,6 +35,11 @@
 | TASK-24 | Histórico SOS com status "visualizado por N familiares" | 12 |
 | TASK-26 | SOS por 5 toques rápidos na tela (substitui Accessibility Service) | 12 |
 | TASK-28 | Feature Veículos ativada: adulto (card dashboard) + idoso (botão) | 12 |
+| TASK-29 | Certificado HTTPS do backend de IA (`certbot --nginx -d api.melbrai.com.br`, rodado pelo usuário via SSH) — `curl https://api.melbrai.com.br/healthz` de fora confirma `{"status":"ok"}` sem erro de TLS | 19 |
+| TASK-31 | Chat Familiar: áudio não gravava (gesto segurar/soltar exigia precisão demais) — trocado para toque único; upload e reprodução confirmados funcionando de ponta a ponta no aparelho físico. Também corrigida a responsividade do botão de play (alvo de toque pequeno + sem feedback imediato ao tocar) | 21 |
+| TASK-30 | Confirmado "Falar Comando" ponta a ponta com a IA — achada e corrigida a causa raiz real: a Groq descontinuou o modelo `llama-3.3-70b-versatile` (404 model_not_found), então a IA nunca respondia de fato, mesmo com certificado e rede OK. Trocado para `openai/gpt-oss-20b` (código + `.env` da VPS) | 21 |
+| TASK-32 | "Falar Comando" evoluído pra assistente conversacional multi-turno: várias trocas seguidas sem tocar o botão de novo, nova ação `perguntar` (pede esclarecimento em vez de inventar dado), contexto real dos lembretes enviado à IA (grounding, incluindo itens da lista de compras), histórico limitado a 3 trocas, temperatura baixa, limite de 6 turnos por conversa, encerramento por frase ("obrigado"/"pode parar") ou silêncio. Testado ao vivo no aparelho físico | 21 |
+| TASK-33 | Bug achado em teste ao vivo: dizer "SOCORRO" às vezes fazia o app falar "não entendi" **e** disparar o SOS ao mesmo tempo — causa raiz: o STT reporta status "done" (texto ainda vazio) um instante antes de entregar o resultado reconhecido, então `_processarComando('')` rodava e falava "não entendi" antes do evento com "SOCORRO" chegar e acionar o SOS de verdade. Corrigido com uma espera de 400 ms + checagem de `_sosDisparado` antes de falar "não entendi" — sem tocar na lógica/timing do SOCORRO em si. Confirmado corrigido pelo usuário no aparelho físico | 21 |
 
 ---
 

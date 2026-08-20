@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — Me Lembra Aí
 
-> Última atualização: 2026-08-19 (sessão 17)
+> Última atualização: 2026-08-20 (sessão 21)
 
 ---
 
@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.4.0+15` |
-| APK atual | `me-lembra-ai-v1.4.0.apk` — 63.9 MB |
+| Versão do app | `1.5.0+19` |
+| APK atual | `me-lembra-ai-v1.4.2.apk` — 63.9 MB (v1.5.0 ainda não gerada em release, só debug) |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
@@ -67,12 +67,15 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 
 ### Perfil Idoso
 - [x] Interface com botões grandes (altura 70–90 px, fonte 24–32 px)
-- [x] **Botão único "Falar Comando"**: roteador de intenção por voz que substitui os antigos botões separados de "Ouvir lembretes", "Criar lembrete por voz" e "Meus Alertas SOS" — o usuário só fala o que quer:
+- [x] **Botão único "Falar Comando"**, agora um **assistente conversacional multi-turno** (sessão 21): roteador de intenção por voz que substitui os antigos botões separados de "Ouvir lembretes", "Criar lembrete por voz" e "Meus Alertas SOS" — o usuário só fala o que quer, e pode ter várias trocas seguidas sem tocar o botão de novo:
   - "quais são meus lembretes de hoje" → lê os lembretes do dia (TTS)
   - "adiciona leite na lista de compras" → adiciona item à lista de compras existente ou cria uma nova
   - "meus alertas" → fala um resumo dos alertas SOS (quantidade, mais recente, se foi visto pela família) — sem abrir tela
   - "SOCORRO" a qualquer momento da escuta → prioridade máxima, dispara o SOS na hora, **sempre local, nunca passa pela IA**
   - qualquer outra frase → primeiro tenta o **backend de IA (Groq)** (`AiCommandService`); se não tiver internet/backend fora do ar, cai no parser local de sempre (STT + data/hora em pt-BR) tratando como criar lembrete
+  - pedido ambíguo (ex.: "marca uma consulta" sem dizer quando) → IA **pergunta** em vez de inventar, e o microfone reabre sozinho pra ouvir a resposta
+  - a conversa continua até o usuário dizer algo como "obrigado"/"pode parar", ficar em silêncio, ou chegar a 6 turnos (aviso automático nesse caso)
+  - a IA recebe um resumo real dos lembretes existentes (título/tipo/data, e itens da lista de compras) a cada chamada — grounding pra não inventar dado que não existe
 - [x] Briefing matinal automático às 8h
 - [x] Detector de queda via acelerômetro (sensors_plus)
 - [x] Botão SOS com confirmação por voz ("SOCORRO" aciona SOS)
@@ -173,6 +176,8 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 | ~~`sos_notifier.py` não está implantado na VPS de produção~~ | ~~Alto~~ | ✅ Implantado de fato na sessão 17 — ver histórico de sessões abaixo |
 | Clone Git órfão em `/root/ME-LEMBRA-AI` na VPS, com segredos em arquivos não commitados | Médio | Descoberto na sessão 16, não tocado — precisa de autorização explícita antes de limpar |
 ~~Ligação automática do SOS cancelada pela rede/operadora (SIP 487)~~ | ~~Médio~~ | ✅ Corrigido na sessão 13f — faltava o código do país (+55) no número discado |
+| `test/reminder_service_test.dart` com 6 testes falhando | Baixo | Pré-existente desde abril/2026 (commit `8507bec`), não relacionado a nenhuma mudança recente — descoberto na sessão 19 ao rodar a suíte completa |
+| ~~Envio de áudio no Chat Familiar falha (Firebase Storage 404 "server terminated the upload session")~~ | ~~Alto~~ | ✅ Resolvido na sessão 21 — ver TASK-31 no histórico. |
 
 ---
 
@@ -197,6 +202,8 @@ Copy-Item "C:\MeLembraAI\build\app\outputs\flutter-apk\app-release.apk" `
 ```
 
 > **Atenção:** Sempre buildar em `C:\MeLembraAI`. O OneDrive mantém locks nos arquivos `.so` nativos durante a sincronização, causando `AccessDeniedException` no Gradle.
+
+> **Atenção (achado na sessão 18):** se o Gradle falhar com `Could not find the firebase_core FlutterFire plugin, have you added it as a dependency in your pubspec?` (mesmo com o pacote correto no `pubspec.yaml`), o cache do pub em `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\` está com pacotes corrompidos (pastas vazias — sem `pubspec.yaml`/`android/`). Para detectar: `Get-ChildItem $env:LOCALAPPDATA\Pub\Cache\hosted\pub.dev -Directory | ForEach-Object { if ((Get-ChildItem $_.FullName -Force).Count -eq 0) { $_.Name } }`. Remover as pastas vazias listadas e rodar `flutter pub get` de novo para forçar o redownload.
 
 ---
 
@@ -243,10 +250,49 @@ Copy-Item "C:\MeLembraAI\build\app\outputs\flutter-apk\app-release.apk" `
 Alterações em `firestore.rules` ou `firestore.indexes.json` só valem em produção após:
 
 ```powershell
-firebase deploy --only firestore:rules,firestore:indexes
+firebase deploy --only firestore:rules,firestore:indexes --project me-lembra-ai-bf0f0
 ```
 
 > **Atenção:** sem isso, a query de `sos_alerts` (userId + orderBy createdAt) falha por falta de índice e o `markViewed` falha por permissão — mesmo com o código já corrigido localmente.
+>
+> **Atenção (sessão 19/20):** rodar sem `--project` dá `Error: No currently active project` (não há projeto ativo configurado localmente pro Firebase CLI) — sempre passar `--project me-lembra-ai-bf0f0` explicitamente, ou rodar `firebase use --add` uma vez pra fixar o projeto padrão.
+
+---
+
+## Plano Blaze e custo estimado (Firebase Storage)
+
+O upload de áudio do Chat Familiar falha (ver "Lacunas" acima) porque o
+Firebase Storage nunca foi provisionado pro projeto — desde que o Google
+mudou a política (out/2024), habilitar Storage (mesmo dentro da cota
+gratuita) exige o plano **Blaze** (pay-as-you-go, com cartão cadastrado),
+não é mais possível só no Spark (grátis).
+
+**Como ativar**: Firebase Console → ícone de engrenagem → "Fazer upgrade"
+→ escolher Blaze → associar um cartão. Depois disso, `storage.rules`
+provavelmente precisa ser criado/deployado também (hoje não existe no
+repo) — verificar no Console se o bucket
+`me-lembra-ai-bf0f0.firebasestorage.app` passou a existir e testar o envio
+de áudio de novo.
+
+**Análise de custo (sessão 19, baseada em
+[firebase.google.com/pricing](https://firebase.google.com/pricing)):**
+
+| Serviço | Cota grátis/mês (já no Blaze) | Preço acima da cota |
+|---|---|---|
+| Storage — armazenamento | 5 GB-mês | US$ 0,026/GB |
+| Storage — download (egress) | 100 GB | ~US$ 0,12/GB |
+| Storage — uploads | 5.000 operações | pequeno, por lote de 10k |
+| Firestore — leituras | 50.000/dia | já disponível hoje, mesmo sem Blaze |
+| Firestore — escritas | 20.000/dia | já disponível hoje, mesmo sem Blaze |
+| FCM (push, usado no SOS) | **ilimitado, sempre grátis** | — |
+
+**Não tem mensalidade fixa no Blaze** — só cobra o que passar da cota.
+Pro volume real do Me Lembra Aí (app de uso familiar, não milhões de
+usuários; único uso novo de Storage é áudio de chat, ~50–200 KB por
+mensagem), estourar os 5 GB grátis exigiria dezenas de milhares de áudios
+por mês — a expectativa é **custo $0/mês** na prática. Contas novas no
+Blaze também costumam vir com US$ 300 de crédito grátis, cobrindo qualquer
+estouro pequeno várias vezes.
 
 ---
 
@@ -254,9 +300,20 @@ firebase deploy --only firestore:rules,firestore:indexes
 
 Serviço novo, separado do `sos_notifier.py`, que recebe a frase transcrita
 pelo botão "Falar Comando" (quando não bate em nenhuma regra local rápida) e
-usa a API da Groq (`llama-3.3-70b-versatile`, grátis até 30k tokens/min e
-14.400 req/dia) para devolver uma ação estruturada em JSON. O SOS nunca passa
-por aqui — continua 100% local no app.
+usa a API da Groq (modelo em `GROQ_MODEL`, hoje `openai/gpt-oss-20b` — grátis
+até 30k tokens/min e 14.400 req/dia) para devolver uma ação estruturada em
+JSON. O SOS nunca passa por aqui — continua 100% local no app.
+
+> **Atenção (sessão 21):** a Groq descontinua modelos de tempos em tempos —
+> `llama-3.3-70b-versatile` (usado desde a sessão 15) parou de existir em
+> algum momento por volta de 19/08/2026 e todas as chamadas passaram a
+> retornar 404 `model_not_found`, silenciosamente engolido por
+> `AiCommandService.interpretar()` e caindo no parser local sem nenhum aviso
+> visível pro usuário. Se o "Falar Comando" voltar a "não entender nada" um
+> dia, o primeiro lugar a checar é `journalctl -u melembra-ai-backend -f` na
+> VPS durante um teste, e a lista de modelos atuais em
+> `https://console.groq.com/docs/models` (ou `curl .../v1/models` com a
+> chave real) — o catálogo pode ter mudado de novo.
 
 **Domínio**: `api.melbrai.com.br` (já configurado em
 `AiCommandService._baseUrl`).
@@ -271,10 +328,35 @@ por aqui — continua 100% local no app.
 | venv Python + dependências (`requirements.txt`) | ✅ Feito |
 | Serviço systemd `melembra-ai-backend` ativo, porta **8091** | ✅ Feito — `curl http://127.0.0.1:8091/healthz` responde `{"status":"ok"}` |
 | nginx (proxy reverso `api.melbrai.com.br` → 8091) | ✅ Configurado (`nginx -t` a confirmar) |
-| DNS: registro A `api` → `204.168.180.25` | ⏳ Domínio `melbrai.com.br` migrando nameservers pra Cloudflare (~45 min de transição); registro A ainda não confirmado |
-| Certificado HTTPS (`certbot --nginx`) | ⏳ Bloqueado até o DNS propagar |
-| Teste de fora (`curl https://api.melbrai.com.br/healthz`) | ⏳ Pendente |
-| Rebuild do APK com o domínio real (já feito, v1.4.2) | ✅ Feito — só falta o backend responder de fato |
+| DNS: registro A `api` → `204.168.180.25` | ✅ Resolve (confirmado na sessão 19) |
+| Certificado HTTPS (`certbot --nginx`) | ✅ **Emitido e implantado na sessão 19** (usuário rodou `certbot --nginx -d api.melbrai.com.br --non-interactive --agree-tos -m fasterdrible@gmail.com --redirect` via SSH) — expira em 2026-11-17, renovação automática configurada pelo certbot |
+| Teste de fora (`curl https://api.melbrai.com.br/healthz`) | ✅ Responde `{"status":"ok"}` sem erro de TLS (confirmado após o certbot) |
+| Rebuild do APK com o domínio real (já feito, v1.4.2) | ✅ Feito — backend agora acessível por HTTPS |
+
+**Achado da sessão 19 (2026-08-19)**: investigando por que o "Falar Comando"
+não entende bem os comandos, uma requisição HTTPS externa a
+`https://api.melbrai.com.br/healthz` falha com
+`Hostname/IP does not match certificate's altnames: Host: api.melbrai.com.br
+is not in the cert's altnames: DNS:api.xn--egidelicitaes-sgb4s.com.br` — o
+nginx da VPS compartilhada está servindo o certificado TLS de **outro**
+projeto do usuário para esse domínio (provavelmente porque nunca rodou
+`certbot --nginx -d api.melbrai.com.br` com sucesso, então cai no
+`server{}` padrão/catch-all do nginx). Resultado: **toda chamada HTTPS do
+app pro backend de IA falha na validação do certificado**, é engolida
+silenciosamente por `AiCommandService.interpretar()` (`catch (_) { return
+null; }`, sem log até a sessão 19) e o app cai sempre no parser local
+básico — que só entende os atalhos fixos ("ouvir lembretes", "meus
+alertas", "adicionar X na lista"); qualquer outra frase vira "criar
+lembrete" de forma literal. **Isso explica a percepção de "não entende bem
+os comandos": a IA (Groq) nunca chega a ser chamada de verdade.**
+Corrigido na sessão 19: `AiCommandService.interpretar()` agora loga
+(`debugPrint`) o status HTTP ou a exceção antes de cair no fallback, pra
+facilitar diagnóstico via `adb logcat` no futuro. **Resolvido também na
+sessão 19**: usuário autorizou acesso SSH e rodou `certbot --nginx -d
+api.melbrai.com.br --non-interactive --agree-tos -m fasterdrible@gmail.com
+--redirect` na VPS — certificado emitido e implantado com sucesso,
+`curl https://api.melbrai.com.br/healthz` de fora responde `{"status":"ok"}`
+sem erro de TLS. TASK-29 fechada.
 
 ### Percalços encontrados durante o deploy (registrados pra não repetir)
 
@@ -397,3 +479,8 @@ systemctl status sos-notifier --no-pager   # deve mostrar "Ouvindo sos_alerts cr
 | 15 | 2026-07-03 | Pedido do usuário: app "interagindo com o usuário" como um agente. Avaliado o framework Hermes Agent (não aplicável — é um agente de terminal, não conversa por voz num app mobile). Decidido: backend próprio na VPS (`server/ai_command_server/`, Flask) chamando a **API da Groq** (`llama-3.3-70b-versatile`, escolha do usuário, tier grátis) para interpretar frases que não batem nas regras locais rápidas, devolvendo ação estruturada em JSON. Autenticação via `firebase_admin.auth.verify_id_token` (reaproveita o `serviceAccountKey.json` do `sos_notifier.py`). App: nova dependência `http`, novo `lib/services/ai_command_service.dart` (`AiCommandService.interpretar`, timeout 6s, retorna `null` em qualquer falha), `_processarComando` tenta a IA antes do parser local (fallback automático offline). SOS continua 100% local, inalterado. **Bloqueado até ter domínio configurado** (`AiCommandService._baseUrl` é um placeholder) — ver seção "Backend de comando de voz por IA" acima. **Nota de segurança**: usuário colou uma API key da Groq em texto plano na conversa — precisa revogar e gerar uma nova antes do deploy. v1.4.1 (Flutter pronto; backend aguardando deploy) |
 | 16 | 2026-07-03 | Deploy real do backend de IA na VPS `204.168.180.25`. Domínio definido: `api.melbrai.com.br` (primeira tentativa usou domínio errado — `mylaassistente.com.br`, de outra aplicação do usuário — revertida antes de commitar). Backend rodando com sucesso na porta **8091** (trocada de 8001 por conflito com container Docker de outro projeto — VPS é compartilhada com vários outros projetos do usuário). Corrigido: venv Python (Ubuntu 24.04 bloqueia pip fora de venv, PEP 668), `serviceAccountKey.json` novo gerado no Firebase Console (não existia `/root/sos_notifier/` pra reaproveitar — descoberto que o `sos_notifier.py` nunca foi implantado nessa VPS de fato, apesar da documentação dizer o contrário — ver "Lacunas"). Confundido duas vezes `google-services.json` (config Android) com o `serviceAccountKey.json` (Admin SDK) até achar a aba certa no Firebase Console. **Dois vazamentos de segredo tratados**: chave da Groq (revogada e trocada) e um `GITHUB_TOKEN` que apareceu num `/root/.env` criado sem querer (apagado; token precisa ser revogado no GitHub se ainda não foi). Achado e não tocado: clone Git órfão em `/root/ME-LEMBRA-AI` com segredos soltos em arquivos não commitados — fica pra limpeza futura, com autorização explícita. **Pendente**: DNS do `melbrai.com.br` migrando pra Cloudflare (~45 min), registro A `api` ainda não confirmado, certificado HTTPS via certbot bloqueado até isso propagar. v1.4.2 (código sem mudança nesta sessão — só infraestrutura) |
 | 17 | 2026-08-19 | **`sos_notifier.py` implantado de verdade na VPS `204.168.180.25`**, fechando a lacuna descoberta na sessão 16. Acesso via SSH com senha (chaves SSH locais do usuário eram de outros projetos, nenhuma valia pra essa VPS). Reaproveitado `serviceAccountKey.json` de `/root/ai_command_server/` (mesmo projeto Firebase `me-lembra-ai-bf0f0`) — não precisou gerar chave nova. Aplicada a mesma lição da sessão 16: venv Python (`python3 -m venv` + `venv/bin/pip install -r requirements.txt`), já que Ubuntu 24.04 bloqueia pip fora de venv (PEP 668) — `sos-notifier.service` (local e remoto) corrigido para apontar `ExecStart` pro `venv/bin/python3` em vez de `/usr/bin/python3`. Serviço ativado via `systemctl enable --now sos-notifier`, confirmado `active (running)` com log `Ouvindo sos_alerts criados após ...`. Nesta sessão também foi criado o **Hermes Dev** (`server/hermes_dev/` + `.claude/agents/hermes-*.md` + `.claude/skills/hermes-dev/`) — Fase 1 de um sistema de manutenção autônoma supervisionada pro código do app, separado do Hermes Produto (avaliado e descartado na sessão 15); ver `server/hermes_dev/README.md`. v1.4.2 (código do app sem mudança — infraestrutura + tooling de desenvolvimento) |
+| 18 | 2026-08-19 | Testado o app num emulador Android e no celular físico (R9QL200MJ0N) a pedido do usuário. **Achado crítico de ambiente**: cache do `pub` com 18 pacotes corrompidos (pastas vazias, sem `pubspec.yaml`/`android/`), incluindo `firebase_core`, `cloud_firestore`, `firebase_auth`, `firebase_storage` e `jni` — bloqueava qualquer build (debug ou release) com erro enganoso do Gradle ("Could not find the firebase_core FlutterFire plugin"). Corrigido removendo as pastas vazias de `%LOCALAPPDATA%\Pub\Cache\hosted\pub.dev\` e forçando `flutter pub get` de novo (nota adicionada em "Como buildar" acima). App confirmado funcionando no celular físico após a correção — abriu sem crash, dados reais carregando do Firestore. Achado menor: `PlatformException(NO_SENSOR)` não tratada em `sensors_plus` (detector de queda) nesse aparelho específico, que não tem acelerômetro — não derruba o app, mas é uma exceção não tratada. |
+| 19 | 2026-08-19 | **Data/horário nos lembretes**: Remédios/Consultas/Aniversários/Eventos/Outros em `meus_lembretes_screen.dart` agora mostram "Hoje/Amanhã/dd-mm-aaaa · HH:mm" (`_formatarDataHora()`, `intl`) em vez de só a hora. **"Falar Comando" não entendia bem — investigação completa**: (1) certificado HTTPS de `api.melbrai.com.br` nunca tinha sido emitido (nginx sem bloco `listen 443` pra esse domínio, caía no certificado de outro projeto na VPS compartilhada) — **corrigido nesta sessão**: usuário rodou `certbot --nginx -d api.melbrai.com.br --non-interactive --agree-tos -m fasterdrible@gmail.com --redirect` via SSH (autorizado explicitamente pelo usuário, já que acesso SSH remoto é bloqueado por padrão pelo modo automático), confirmado `curl https://api.melbrai.com.br/healthz` de fora responde `{"status":"ok"}` — TASK-29 fechada. (2) `AiCommandService.interpretar()` e `_processarComando()` ganharam `debugPrint` (não tinha log nenhum antes). (3) Verbos formais do imperativo ("adicione", "coloque", "inclua", "bote", "acrescente", "ponha") faltavam em `_isAdicionarNaLista`/`_extrairItensDoComando` em `elderly_screen.dart` — comandos como "adicione carne..." caíam no parser genérico de lembrete. (4) `_adicionarItensNaLista` procurava lista de compras existente por texto solto (`contains('mercado')`) em vez do tipo exato — podia grudar item em lembrete errado; corrigido pra `r.type == 'Compras'` apenas. (5) `_inferirTipo()` tinha fallback perigoso pra `'Remedio'` quando não reconhecia a frase (podia sujar a lista de remédios reais); trocado pra `'Lembrete'` genérico. (6) Ampliados os padrões de destino reconhecidos ("ao mercado", "pra lista", "para o mercado"). (7) **Causa mais profunda encontrada via log real**: o STT estava cortando a frase no meio ("adicionar carne à lista **do**", "adicionar carne **ao**" sem completar) — `pauseFor` de 3s era curto demais pra alguém que fala com pausas; aumentado pra 6s (`listenFor` de 12s pra 25s) em `_falarComando()`. **Hermes Dev removido do projeto** a pedido do usuário (`.claude/agents/hermes-*.md`, `.claude/skills/hermes-dev/`, `server/hermes_dev/`) — antes de apagar, uma correção não commitada num worktree do Hermes (`bug-001-fcm-token-cuidador`) foi resgatada e trazida pra `main`: `FcmService.init()` não era chamado no fluxo de login/cadastro que vai direto de `ProfileSelectionScreen` pra tela do perfil sem nunca construir a `HomeScreen` — cuidadores recém-cadastrados podiam nunca ter o `fcmToken` salvo, quebrando o push de SOS pra eles. `init()` agora é idempotente (guarda `_listenersRegistered`) e chamado também em `_goToProfile()`; teste de regressão `test/profile_selection_screen_test.dart` + mock `test/support/firebase_core_mocks.dart` adicionados e passando. Suíte completa rodada: 16 passando (15 antigos + o novo), 6 falhando em `test/reminder_service_test.dart` — **pré-existente, de abril, não relacionado a esta sessão**. |
+| 21 | 2026-08-20 | **Continuação da sessão — TASK-30 (verificação da IA) e TASK-32 (assistente conversacional).** Ao tentar validar a TASK-30 no aparelho físico, achada a causa raiz real do "Falar Comando não entende": a Groq **descontinuou o modelo `llama-3.3-70b-versatile`** (toda chamada retornava 404 `model_not_found`, silenciosamente engolida e caindo no parser local) — isso já vinha falhando desde 19/08, depois do certificado ter sido corrigido na sessão 19, então a TASK-29 resolveu o TLS mas não a causa raiz de verdade. Confirmado via `journalctl -u melembra-ai-backend` na VPS e via `curl .../v1/models` com a chave real: lista de modelos de texto em produção hoje é `openai/gpt-oss-20b` / `openai/gpt-oss-120b` (a Groq trocou o catálogo inteiro — nada de Llama 3.x, Mixtral ou Gemma sobrou). Corrigido: `GROQ_MODEL` default no código e no `.env` da VPS trocado para `openai/gpt-oss-20b`; `.env.example` documentado com aviso de que isso pode acontecer de novo. **A pedido do usuário, "Falar Comando" foi evoluído pra um assistente conversacional multi-turno (TASK-32)**, com guardrails explícitos contra alucinação (ver ARCHITECTURE.md, seção "Comando de voz"): nova ação `perguntar` pra IA pedir esclarecimento em vez de inventar dado faltante; contexto real dos lembretes (título/tipo/data, e itens da lista de compras) enviado a cada chamada; histórico limitado às últimas 3 trocas; `temperature=0.2`; limite de 6 turnos por conversa; encerramento por frase ("obrigado"/"pode parar") ou silêncio — sem precisar tocar o botão a cada fala. Testado ao vivo e extensivamente no aparelho físico pelo usuário: pergunta de esclarecimento funcionando, criação de lembrete após resposta funcionando, limite de 6 turnos confirmado ("avisou e parou"), fallback local em uma falha pontual de rede não travou a conversa. Achado e corrigido no meio do teste: o resumo de lembretes mandado pra IA não incluía a descrição (onde ficam os itens da lista de compras) — a IA corretamente não inventou o conteúdo (guardrail funcionando), mas também não conseguia responder "o que tem na minha lista" por falta de dado; corrigido incluindo os itens no contexto só para lembretes tipo Compras. Sem exclusão/edição de lembretes por voz nesta versão (fora de escopo, decisão do usuário) e sem mudança no pipeline de SOS. v1.5.0+19 (só build debug testada; release ainda não gerado). Deploy do backend feito pelo próprio usuário via SSH (autorizado explicitamente, três vezes: código novo, correção do modelo, correção do contexto de lembretes). **Bug achado em teste ao vivo (TASK-33)**: dizer "SOCORRO" às vezes fazia o app falar "não entendi" e disparar o SOS ao mesmo tempo — causa raiz: `onStatus` do STT reporta "done"/"notListening" (com `_capturaComando` ainda vazio) um instante antes de `onResult` entregar o texto reconhecido, então `_processarComando('')` rodava e falava "não entendi" antes do evento com "SOCORRO" chegar e acionar o SOS de verdade pelo caminho correto. Corrigido com uma espera de 400 ms + checagem de `_sosDisparado` antes de falar "não entendi", sem alterar a lógica/timing do SOCORRO em si (prioridade máxima, sempre local). Confirmado corrigido pelo usuário no aparelho físico. v1.5.0+19. |
+| 21 (áudio) | 2026-08-20 | **TASK-31 (não planejada, achada durante verificação da TASK-30): Chat Familiar não gravava áudio.** Usuário reportou "envio de áudio não está gravando" ao testar. Diagnóstico ao vivo no celular físico (R9QL200MJ0N), com build debug instrumentado com `debugPrint` temporário em `chat_screen.dart` e `adb logcat`: o botão de microfone usava o gesto "segurar para gravar / soltar para enviar" (`onLongPressStart`/`onLongPressEnd`), mas o usuário soltava o dedo rápido demais — 2 tentativas nem venceram o threshold de long-press do Flutter (~500ms, viraram `onLongPressCancel`), e a 3ª tentativa gravou de verdade (permissão OK, arquivo criado, `record.start()` concluído sem erro) mas foi interrompida 106ms depois por um `onLongPressEnd` prematuro — áudio efetivamente vazio. Não era bug de código, e sim um gesto pouco tolerante pro público do app (idosos/família). **Corrigido**: trocado o gesto de "segurar/soltar" para "toque único" (toca pra iniciar, toca de novo no mesmo botão pra parar e enviar) em `chat_screen.dart` — mais robusto e mais fácil pro público-alvo, mesmo padrão de simplificação já usado no "Falar Comando" (sessão 14). Testado no aparelho físico com a correção: gravação de ~15s completada, upload pro Firebase Storage confirmado com sucesso (URL com token gerado), reprodução tocando normalmente — **confirmado pelo usuário ouvindo o áudio real**. Isso também fecha de fato a lacuna "upload 404" registrada na sessão 19/20 (o Storage aparentemente já está provisionado/Blaze ativo; não foi mais reproduzido). Prints de diagnóstico (`debugPrint('DEBUG_AUDIO: ...')`) removidos do código final. v1.4.3+18 (só build debug testada; release ainda não gerado). Ainda na mesma sessão, usuário reportou baixa responsividade no **botão de play** das mensagens de áudio ("tive que tocar bem no centro", "no WhatsApp é bem melhor"). Duas causas: (1) `IconButton` com `constraints: BoxConstraints(minWidth: 36, minHeight: 36)` — abaixo do alvo de toque mínimo recomendado (48×48dp); (2) `_togglePlay()` só chamava `setState()` **depois** do `await _player.play()` resolver, ou seja, o ícone só trocava de play→pausa depois que o áudio terminava de carregar da rede (1-2s de buffering do Firebase Storage), dando sensação de botão travado. Corrigido: alvo de toque para 48×48; `setState(() => _playingId = m.id)` agora roda **antes** do `await _player.play()` (feedback otimista imediato), com rollback se o play() falhar. **Confirmado pelo usuário: "ficou bom".** TASK-30 (verificação do "Falar Comando" com a IA) ainda pendente — não chegou a ser testada nesta sessão porque o trabalho no Chat Familiar tomou o tempo da sessão. |
+| 20 | 2026-08-19 | **"Tomar Água" não mostrava lembretes criados com essa categoria** — a seção em `meus_lembretes_screen.dart` só renderizava o contador de copos (`_aguaWidget()`), nunca os lembretes tipo `'Tomar'` (criáveis manualmente na tela Adicionar); corrigido pra listar os dois. Também corrigido `_inferirTipo()` em `elderly_screen.dart`: "tomar água" por voz virava categoria "Remédio" por engano (palavra "tomar" misturada nas palavras-chave de remédio) — agora checa "água"/"agua" antes e categoriza como "Tomar". **Chat Familiar — duas melhorias pedidas pelo usuário**: (1) opção de excluir mensagem (long-press na própria bolha, `ChatService.deleteMessage()`, `firestore.rules` alterada de `allow update, delete: if false` pra permitir `delete` só do remetente — deploy feito com `firebase deploy --only firestore:rules,firestore:indexes --project me-lembra-ai-bf0f0`). (2) Botão de áudio investigado ao vivo no celular: a gravação em si funciona (confirmado via log nativo — captura e grava o arquivo normalmente), mas o **upload pro Firebase Storage falha com 404** ("server terminated the upload session"); não existe `storage.rules` no repo, suspeita forte de Storage nunca provisionado no Console (ver "Lacunas") — **não corrigido, requer o usuário verificar/ativar o Storage no Console do Firebase** (fora do alcance de correção só por código). |

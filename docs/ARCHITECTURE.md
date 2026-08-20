@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-06-01 (sessão 12)
+> Última atualização: 2026-08-20 (sessão 21)
 
 ---
 
@@ -177,6 +177,8 @@ Permite leitura do convite sem acesso direto a `users/{uid}`.
 }
 ```
 `chatId` = concatenação ordenada dos dois UIDs (garantido por `ChatService`).
+Exclusão: `firestore.rules` permite `delete` só quando `senderUid` da
+mensagem é o próprio usuário (long-press na bolha em `chat_screen.dart`).
 
 ---
 
@@ -291,14 +293,14 @@ Usuário pressiona volume 5× em ≤ 3 s (app em foreground):
 Botão único (mic ↔ enviar): mostra mic quando o campo está vazio,
 vira ícone de enviar assim que há texto digitado.
 
-Usuário segura botão de microfone:
-  GestureDetector.onLongPressStart → _startRecording()
+Usuário toca o botão de microfone (1º toque):
+  GestureDetector.onTap → _startRecording()
     ├─ recorder.hasPermission()
     ├─ recorder.start(RecordConfig(aacLc), path: tmp/audio_TIMESTAMP.m4a)
     └─ Timer periódico: atualiza _recordingDuration a cada 1 s
 
-Usuário solta o botão:
-  GestureDetector.onLongPressEnd → _stopAndSend()
+Usuário toca o botão de novo (2º toque):
+  GestureDetector.onTap → _stopAndSend()
     ├─ recorder.stop() → path do arquivo
     ├─ ChatService.sendAudio(member.uid, file, durationMs)
     │    └─ Firebase Storage → audioUrl
@@ -306,26 +308,63 @@ Usuário solta o botão:
     └─ Deleta arquivo temporário
 ```
 
-### Comando de voz (Falar Comando)
+> Até a sessão 20 o gesto era "segurar para gravar / soltar para enviar"
+> (`onLongPressStart`/`onLongPressEnd`). Trocado para toque único na sessão
+> 21 (TASK-31) — o gesto de segurar exigia precisão demais pro público do
+> app (idosos/família): soltar o dedo cedo demais gerava áudios de duração
+> quase zero, e o usuário percebia isso como "não grava".
+
+### Comando de voz (Falar Comando) — assistente conversacional multi-turno
+
+Desde a sessão 21, "Falar Comando" não é mais de uma tacada só: o mesmo
+ponto de entrada (`_processarComando`) é chamado repetidamente, deixando o
+microfone reabrir sozinho ao final de cada turno, até a conversa terminar
+por frase de encerramento, silêncio, ou o limite de 6 turnos. Isso garante
+que a checagem de SOCORRO e as regras locais continuem tendo prioridade
+máxima em **todo** turno, não só no primeiro.
 
 ```
-Usuário toca "Falar Comando" e fala:
-  _falarComando() → STT (speech_to_text) → _processarComando(texto)
-    ├─ "SOCORRO" a qualquer momento → SEMPRE local, prioridade máxima → _acionarSOS()
+Usuário toca "Falar Comando" (ou já está no meio de uma conversa):
+  _iniciarEscuta() → STT (speech_to_text) → _finalizarComando() → _processarComando(texto)
+    ├─ "SOCORRO" a qualquer momento → SEMPRE local, prioridade máxima →
+    │    _encerrarConversa() + _acionarSOS()
+    ├─ frase de encerramento ("obrigado"/"pode parar"/...) → local, fala
+    │    "Até logo!", _encerrarConversa(), para de escutar
     ├─ regras locais rápidas (ouvir lembretes / alertas / adicionar na lista)
     │    → resolve na hora, sem rede
     └─ qualquer outra frase:
-         AiCommandService.interpretar(texto)
+         _lembretesParaContextoIA() → resumo leve dos lembretes reais
+           (título/tipo/data-hora; itens da lista quando for tipo Compras)
+         AiCommandService.interpretar(texto, historico, lembretesContexto)
            ├─ POST https://<dominio>/interpretar-comando
            │    Authorization: Bearer <Firebase ID token>
-           │    (timeout 6s)
+           │    body: { texto, contexto: { agora, lembretes }, historico }
+           │    (timeout 6s; historico = últimas 3 trocas da conversa)
            ├─ backend (server/ai_command_server/, na VPS):
            │    ├─ verifica o ID token (firebase_admin.auth)
-           │    └─ chama a Groq (llama-3.3-70b-versatile) → JSON estruturado
-           ├─ sucesso → _executarAcaoIA(acao) despacha pro handler certo
+           │    └─ chama a Groq (GROQ_MODEL, hoje openai/gpt-oss-20b;
+           │         temperature=0.2) com system prompt + histórico +
+           │         contexto real → JSON estruturado
+           │         (ações: criar_lembrete | ouvir_lembretes |
+           │          adicionar_item_lista | consultar_alertas |
+           │          perguntar | responder)
+           ├─ sucesso → _executarAcaoIA(acao) despacha pro handler certo;
+           │    turno é acrescentado ao histórico local (máx. 3 trocas)
            └─ falha/timeout/sem internet → retorna null →
                 cai no parser local de sempre (_criarLembreteDoTexto)
+
+Ao final de cada turno (se a conversa não foi encerrada):
+  turnosConversa++; se >= 6 → avisa e _encerrarConversa(); senão →
+  _iniciarEscuta() de novo, sem precisar tocar o botão.
 ```
+
+**Guardrails contra alucinação**: ação `perguntar` (pede esclarecimento em
+vez de inventar dado faltante, ex. hora de um lembrete); grounding real via
+`contexto.lembretes` (a IA só pode falar sobre lembretes que de fato
+existem); histórico limitado (custo/deriva); enum de ações fechado e
+validado no servidor (`ACOES_VALIDAS`); regra explícita no prompt contra
+inventar lembretes/alertas/SOS fora do contexto fornecido. Sem
+exclusão/edição de lembretes por voz (fora de escopo).
 
 ### Widget Android
 
@@ -458,6 +497,10 @@ server/
 test/
   login_screen_test.dart             # 6 widget tests
   create_reminder_screen_test.dart   # 9 widget tests
+  profile_selection_screen_test.dart # regressão BUG-001 (FcmService.init() no fluxo de perfil)
+  reminder_service_test.dart         # 6 testes falhando desde abril/2026, pré-existente
+  support/
+    firebase_core_mocks.dart         # mocks do Firebase Core p/ testes de widget
 
 docs/
   ARCHITECTURE.md                    # este arquivo
