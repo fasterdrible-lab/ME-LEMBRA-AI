@@ -137,6 +137,41 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _confirmarExclusao(ChatMessage m) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir mensagem'),
+        content: const Text('Deseja excluir esta mensagem?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true) return;
+    if (m.id == _playingId) {
+      await _player.stop();
+      if (mounted) setState(() => _playingId = null);
+    }
+    try {
+      await ChatService.deleteMessage(widget.member.uid, m.id,
+          audioUrl: m.audioUrl);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Falha ao excluir: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _togglePlay(ChatMessage m) async {
     if (m.audioUrl == null) return;
     if (_playingId == m.id) {
@@ -145,8 +180,15 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     await _player.stop();
-    await _player.play(UrlSource(m.audioUrl!));
+    // Muda o ícone pra "pausa" assim que o dedo levanta, antes do áudio
+    // terminar de carregar da rede — sem isso o botão parecia travado
+    // durante o buffering (1-2s) e o usuário achava que o toque não pegou.
     if (mounted) setState(() => _playingId = m.id);
+    try {
+      await _player.play(UrlSource(m.audioUrl!));
+    } catch (e) {
+      if (mounted && _playingId == m.id) setState(() => _playingId = null);
+    }
   }
 
   @override
@@ -195,7 +237,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
                   const SizedBox(width: 8),
                   Text(
-                    'Gravando ${_formatDuration(_recordingDuration)} — solte para enviar',
+                    'Gravando ${_formatDuration(_recordingDuration)} — toque no microfone para enviar',
                     style: const TextStyle(color: Colors.red),
                   ),
                 ],
@@ -220,22 +262,26 @@ class _ChatScreenState extends State<ChatScreen> {
                       onSubmitted: (_) => _send(),
                     ),
                   ),
-                  // Um único botão: microfone (segurar para gravar) quando o
-                  // campo está vazio, ou enviar quando há texto digitado —
-                  // evita dois botões de ação ambíguos lado a lado.
+                  // Um único botão: microfone (toque para gravar, toque de
+                  // novo para enviar) quando o campo está vazio, ou enviar
+                  // quando há texto digitado — evita dois botões de ação
+                  // ambíguos lado a lado. Toque único em vez de segurar:
+                  // segurar-para-gravar exigia precisão demais e causava
+                  // envios de áudio quase vazios quando o dedo era solto
+                  // rápido demais.
                   _hasText
                       ? IconButton(
                           icon: const Icon(Icons.send, color: Color(0xFF4A90D9)),
                           onPressed: _send,
                         )
                       : GestureDetector(
-                          onLongPressStart: (_) async {
-                            if (!_isUploading && !_isRecording) {
+                          onTap: () async {
+                            if (_isUploading) return;
+                            if (_isRecording) {
+                              await _stopAndSend();
+                            } else {
                               await _startRecording();
                             }
-                          },
-                          onLongPressEnd: (_) async {
-                            if (_isRecording) await _stopAndSend();
                           },
                           child: Container(
                             width: 48,
@@ -282,7 +328,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           IconButton(
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             icon: Icon(
               playing ? Icons.pause_circle : Icons.play_circle,
               color: fg,
@@ -298,18 +344,26 @@ class _ChatScreenState extends State<ChatScreen> {
       content = Text(m.text, style: TextStyle(color: fg));
     }
 
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+      constraints: const BoxConstraints(maxWidth: 280),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: content,
+    );
+
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-        constraints: const BoxConstraints(maxWidth: 280),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: content,
-      ),
+      // Só é possível excluir a própria mensagem (mesma regra do Firestore).
+      child: mine
+          ? GestureDetector(
+              onLongPress: () => _confirmarExclusao(m),
+              child: bubble,
+            )
+          : bubble,
     );
   }
 }
