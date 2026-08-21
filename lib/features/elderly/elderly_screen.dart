@@ -53,6 +53,23 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   int _turnosConversa = 0;
   static const int _maxTurnosConversa = 6;
   static const int _maxHistoricoTrocas = 3;
+  // Primeira frase da conversa — fonte do título/tipo/recorrência
+  // (extraídos localmente, nunca pela IA) quando a conversa entra em modo
+  // de coleta de dados do lembrete.
+  String? _primeiroTextoConversa;
+
+  // Coleta de dia/hora de um lembrete: assim que a IA sinaliza que falta
+  // informação ("perguntar"), os turnos seguintes NÃO voltam pra IA — a
+  // IA vinha "esquecendo" o que já tinha sido dito entre turnos (achado
+  // em teste ao vivo, mesmo com o histórico de conversa enviado a cada
+  // chamada). Data/hora passam a ser extraídas localmente e de forma
+  // determinística (mesmo padrão usado por frameworks de chatbot como
+  // Rasa+Duckling — dado estruturado não deve depender do modelo lembrar
+  // do contexto). Só dia e hora viram "campo obrigatório que perguntamos
+  // se faltar" — título/tipo/recorrência já têm fallback seguro local.
+  bool _coletandoLembrete = false;
+  int? _slotDia, _slotMes, _slotAno;
+  int? _slotHora, _slotMinuto;
 
   // SOS por toques: 5 toques em 3 s
   final List<DateTime> _tapTimes = [];
@@ -279,6 +296,149 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
   void _encerrarConversa() {
     _historicoConversa.clear();
     _turnosConversa = 0;
+    _primeiroTextoConversa = null;
+    _coletandoLembrete = false;
+    _slotDia = _slotMes = _slotAno = null;
+    _slotHora = _slotMinuto = null;
+  }
+
+  /// Extrai hora (e minuto, se houver) de uma resposta curta a uma
+  /// pergunta sobre horário (ex.: "15", "15h30", "3 da tarde", "9h").
+  /// Retorna null se não parecer uma resposta de horário.
+  ({int hora, int minuto})? _extrairHoraDeResposta(String texto) {
+    final lower = texto.toLowerCase().trim();
+    final match = RegExp(r'^(\d{1,2})\s*(?:[h:]\s*(\d{1,2}))?')
+        .firstMatch(lower);
+    if (match == null) return null;
+    var hora = int.parse(match.group(1)!);
+    if (hora > 23) return null;
+    final minuto = int.parse(match.group(2) ?? '0');
+    if ((lower.contains('tarde') || lower.contains('noite')) && hora < 12) {
+      hora += 12;
+    }
+    return (hora: hora, minuto: minuto);
+  }
+
+  /// Extrai dia/mês/ano de uma frase, ou null se não achar nada — ao
+  /// contrário de [_parsearDataHora] (que sempre devolve uma data,
+  /// assumindo hoje quando não reconhece nada), aqui null significa
+  /// "ainda não sei", pra poder perguntar em vez de adivinhar.
+  ({int dia, int mes, int ano})? _extrairData(String texto) {
+    final agora = DateTime.now();
+    final lower = texto.toLowerCase();
+    const meses = {
+      'janeiro': 1, 'fevereiro': 2, 'março': 3, 'marco': 3,
+      'abril': 4, 'maio': 5, 'junho': 6, 'julho': 7,
+      'agosto': 8, 'setembro': 9, 'outubro': 10,
+      'novembro': 11, 'dezembro': 12,
+    };
+    if (lower.contains('amanhã') || lower.contains('amanha')) {
+      final d = agora.add(const Duration(days: 1));
+      return (dia: d.day, mes: d.month, ano: d.year);
+    }
+    if (lower.contains('hoje')) {
+      return (dia: agora.day, mes: agora.month, ano: agora.year);
+    }
+    for (final entry in meses.entries) {
+      final re = RegExp(r'(\d{1,2})\s+de\s+' + entry.key);
+      final match = re.firstMatch(lower);
+      if (match != null) {
+        return (dia: int.parse(match.group(1)!), mes: entry.value, ano: agora.year);
+      }
+    }
+    return null;
+  }
+
+  /// Extrai hora/minuto de uma frase completa ("às 15h30") ou de uma
+  /// resposta curta ("15"). Null se não achar nada — mesmo espírito de
+  /// [_extrairData].
+  ({int hora, int minuto})? _extrairHora(String texto) {
+    final lower = texto.toLowerCase();
+
+    final reMeioDia = RegExp(
+        r'(?:ao\s+)?meio[- ]dia(?:\s+e\s+(\d{1,2}))?', caseSensitive: false);
+    final mMeioDia = reMeioDia.firstMatch(lower);
+    if (mMeioDia != null) {
+      return (hora: 12, minuto: int.parse(mMeioDia.group(1) ?? '0'));
+    }
+    if (lower.contains('meia-noite') || lower.contains('meia noite')) {
+      final mMN = RegExp(r'meia[- ]noite\s+e\s+(\d{1,2})', caseSensitive: false)
+          .firstMatch(lower);
+      return (hora: 0, minuto: mMN != null ? int.parse(mMN.group(1)!) : 0);
+    }
+
+    final reHora = RegExp(
+      r'[àa]s?\s+(\d{1,2})'
+      r'(?:\s*[h:]\s*(\d{1,2})'
+      r'|\s+e\s+(\d{1,2})'
+      r'|\s+horas?\s+e\s+(\d{1,2}))?',
+    );
+    final mHora = reHora.firstMatch(lower);
+    if (mHora != null) {
+      var hora = int.parse(mHora.group(1)!);
+      final min = mHora.group(2) ?? mHora.group(3) ?? mHora.group(4);
+      final minuto = int.parse(min ?? '0');
+      if ((lower.contains('tarde') || lower.contains('noite')) && hora < 12) {
+        hora += 12;
+      }
+      return (hora: hora, minuto: minuto);
+    }
+
+    return _extrairHoraDeResposta(texto);
+  }
+
+  /// Mescla dia/hora encontrados em [texto] no estado de coleta (sem
+  /// sobrescrever o que já foi confirmado antes).
+  void _mesclarSlots(String texto) {
+    final data = _extrairData(texto);
+    if (data != null) {
+      _slotDia = data.dia;
+      _slotMes = data.mes;
+      _slotAno = data.ano;
+    }
+    final hora = _extrairHora(texto);
+    if (hora != null) {
+      _slotHora = hora.hora;
+      _slotMinuto = hora.minuto;
+    }
+  }
+
+  /// Depois de mesclar os slots: se faltar dia ou hora, pergunta local
+  /// (sem IA) só o que falta e devolve true (continua ouvindo); se já
+  /// tiver tudo, cria o lembrete e devolve false (encerra a conversa).
+  Future<bool> _finalizarOuPerguntarProximoCampo() async {
+    if (_slotDia == null) {
+      await _falar('Para qual dia?');
+      return true;
+    }
+    if (_slotHora == null) {
+      await _falar('Que horas?');
+      return true;
+    }
+    final origem = _primeiroTextoConversa ?? '';
+    try {
+      final agora = DateTime.now();
+      var dataHora =
+          DateTime(_slotAno!, _slotMes!, _slotDia!, _slotHora!, _slotMinuto ?? 0);
+      // Mesma regra de _parsearDataHora: só rola pro dia seguinte quando
+      // for "hoje" e a hora já passou — não mexe em datas futuras/passadas
+      // explícitas, pra não surpreender com um ano trocado sem avisar.
+      if (dataHora.isBefore(agora) &&
+          _slotDia == agora.day &&
+          _slotMes == agora.month) {
+        dataHora = dataHora.add(const Duration(days: 1));
+      }
+      await _salvarLembrete(
+        titulo: _limparTitulo(origem),
+        tipo: _inferirTipo(origem),
+        dateTime: dataHora,
+        repeat: _inferirRecorrencia(origem),
+        descricao: '',
+      );
+    } catch (_) {
+      await _falar('Não consegui salvar o lembrete.');
+    }
+    return false;
   }
 
   /// Monta um resumo leve dos lembretes (título/tipo/data-hora, nunca o
@@ -339,6 +499,10 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       return;
     }
 
+    if (_historicoConversa.isEmpty && !_coletandoLembrete) {
+      _primeiroTextoConversa = texto;
+    }
+
     _turnosConversa++;
     final t = texto.toLowerCase();
 
@@ -349,7 +513,20 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
         (t.contains('sos') &&
             (t.contains('meus') || t.contains('histórico') || t.contains('historico')));
 
-    if (pedeOuvirLembretes) {
+    // Só continua ouvindo sozinho quando falta dado do lembrete (modo de
+    // coleta) ou a IA fez uma pergunta de esclarecimento. Qualquer outra
+    // ação — ouvir lembretes, adicionar na lista, etc. — já é uma
+    // interação completa; continuar ouvindo depois só faz o app capturar
+    // silêncio/ruído e falar "não entendi" à toa.
+    var esperaResposta = false;
+
+    if (_coletandoLembrete) {
+      // Já sabemos que é um lembrete faltando dia/hora — dados extraídos
+      // localmente, de forma determinística, sem voltar pra IA (ela vinha
+      // "esquecendo" o que já tinha sido dito entre turnos).
+      _mesclarSlots(texto);
+      esperaResposta = await _finalizarOuPerguntarProximoCampo();
+    } else if (pedeOuvirLembretes) {
       await _lerLembretesDoDia();
     } else if (pedeAlertas) {
       await _falarResumoAlertas();
@@ -357,17 +534,21 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
       await _adicionarItemNaListaDeCompras(texto);
     } else {
       // Frase fora dos atalhos locais: tenta interpretar com IA (backend
-      // próprio, que chama a Groq), passando histórico da conversa e um
-      // resumo dos lembretes reais pra ela não inventar dado. Se não
-      // conseguir (sem internet, backend fora do ar, timeout de ~6s), cai
-      // no parser local de sempre.
+      // próprio, que chama a Groq) só nesta primeira vez. Se ela pedir
+      // esclarecimento ("perguntar"), a conversa passa a coletar dia/hora
+      // localmente (acima) em vez de continuar chamando a IA a cada
+      // resposta curta.
       final lembretesContexto = await _lembretesParaContextoIA();
       final acaoIA = await AiCommandService.interpretar(
         texto,
         historico: List.unmodifiable(_historicoConversa),
         lembretesContexto: lembretesContexto,
       );
-      if (acaoIA != null) {
+      if (acaoIA != null && acaoIA.acao == 'perguntar') {
+        _mesclarSlots(_primeiroTextoConversa ?? texto);
+        _coletandoLembrete = true;
+        esperaResposta = await _finalizarOuPerguntarProximoCampo();
+      } else if (acaoIA != null) {
         await _executarAcaoIA(acaoIA);
         _historicoConversa.add(ConversaTurno(texto, acaoIA.fala));
         if (_historicoConversa.length > _maxHistoricoTrocas) {
@@ -380,6 +561,10 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     }
 
     if (!mounted) return;
+    if (!esperaResposta) {
+      _encerrarConversa();
+      return;
+    }
     if (_turnosConversa >= _maxTurnosConversa) {
       await _falar(
           'Vamos continuar depois. Toque em Falar Comando de novo quando quiser.');
@@ -391,6 +576,8 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
 
   /// Executa a ação estruturada devolvida pelo backend de IA.
   Future<void> _executarAcaoIA(ComandoAction acao) async {
+    debugPrint('DEBUG_IA: acao=${acao.acao} titulo=${acao.titulo} '
+        'tipo=${acao.tipo} dataHora=${acao.dataHora} fala="${acao.fala}"');
     switch (acao.acao) {
       case 'ouvir_lembretes':
         await _lerLembretesDoDia();
