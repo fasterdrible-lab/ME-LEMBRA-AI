@@ -1,0 +1,742 @@
+Você é um arquiteto de software e desenvolvedor mobile sênior, especialista em Android, iOS, React Native/Flutter, segurança, acessibilidade, sensores móveis, notificações push, APIs de voz e apps para idosos.
+
+Estou desenvolvendo o app **Me Lembra Aí**, voltado para idosos, familiares e cuidadores. O app já possui lembretes e um botão SOS que, com o app aberto, consegue ligar para um familiar cadastrado. Agora quero implementar um **Sistema SOS Multimodal**, para que o usuário consiga pedir ajuda mesmo quando estiver com dificuldade de abrir o app, mexer na tela ou procurar o botão.
+
+O público principal é formado por idosos, pessoas com limitação física, pessoas que podem passar mal, cair, ficar desorientadas ou precisar chamar familiares rapidamente.
+
+Quero uma solução realista, validada tecnicamente e compatível com as limitações reais de Android e iOS. Não invente tecnologias. Não proponha soluções proibidas, frágeis ou que violem políticas da Play Store ou App Store.
+
+Atenção importante:
+
+O sistema SOS não deve depender de apenas um acionamento. Deve funcionar por camadas, porque nenhum método isolado é 100% confiável em todos os celulares e situações.
+
+Objetivo principal:
+
+Criar um sistema SOS com múltiplas formas de acionamento:
+
+1. Botão SOS dentro do app.
+2. Widget SOS na tela inicial.
+3. Notificação fixa com botão SOS no Android.
+4. Acionamento por chacoalhada do celular.
+5. Detecção de possível queda.
+6. Detecção de inatividade.
+7. Botão físico Bluetooth ou pulseira SOS.
+8. Comando de voz, quando tecnicamente viável.
+9. Atalhos do sistema, quando suportado.
+10. Envio do alerta para backend.
+11. Ligação feita pelo backend via API de voz.
+12. Push notification para familiares.
+13. SMS/WhatsApp como canais complementares.
+14. Envio de localização.
+15. Escalonamento entre familiares.
+
+Premissa fundamental:
+
+O celular do idoso deve apenas disparar o evento SOS quando possível. Quem deve garantir o contato com os familiares é o backend.
+
+Arquitetura desejada:
+
+App do usuário
+↓
+Gatilho SOS acionado
+↓
+Tela de confirmação/cancelamento, quando aplicável
+↓
+Backend recebe evento SOS
+↓
+Backend registra histórico
+↓
+Backend dispara alertas em paralelo:
+
+* ligação via API de voz;
+* push notification;
+* SMS, se contratado;
+* WhatsApp Business API, se contratado;
+* e-mail, se necessário;
+* atualização da tela dos familiares.
+
+Fluxo principal do SOS:
+
+1. Usuário aciona SOS por qualquer gatilho.
+2. App coleta os dados possíveis:
+
+   * ID do usuário;
+   * contatos de emergência;
+   * localização, se autorizada;
+   * horário;
+   * bateria aproximada;
+   * tipo de acionamento;
+   * status do app;
+   * sistema operacional;
+   * modelo do aparelho, se disponível.
+3. App envia evento SOS ao backend.
+4. Backend registra o evento.
+5. Backend dispara alertas para familiares.
+6. Backend tenta ligação para o familiar principal.
+7. Se não houver confirmação, tenta familiar secundário.
+8. Se não houver confirmação, tenta terceiro familiar.
+9. Familiares recebem tela com:
+
+   * nome da pessoa;
+   * horário do SOS;
+   * localização;
+   * botão “Ligar agora”;
+   * botão “Estou indo ajudar”;
+   * botão “Confirmar recebimento”.
+10. Histórico do SOS é atualizado em tempo real.
+
+Gatilho 1 — Botão SOS dentro do app:
+
+Implementar botão grande, visível e fixo nas principais telas do app.
+
+Requisitos:
+
+1. Botão com texto claro:
+   “SOS”
+   “Chamar ajuda”
+   “Acionar familiar”
+
+2. Ao tocar:
+
+   * iniciar contagem curta;
+   * permitir cancelar;
+   * enviar evento ao backend;
+   * tentar ligação local, se permitido;
+   * acionar backend para ligação via API de voz.
+
+3. Evitar botões pequenos ou escondidos.
+
+4. Adicionar modo “idoso” com botão maior e contraste alto.
+
+Gatilho 2 — Widget SOS na tela inicial:
+
+Implementar widget para Android e, se tecnicamente possível, equivalente no iOS.
+
+Objetivo:
+
+Permitir que o idoso acione SOS sem abrir o app.
+
+Requisitos:
+
+1. Widget grande com texto:
+   “SOS - Me Lembra Aí”
+
+2. Ao tocar no widget:
+
+   * abrir fluxo SOS;
+   * enviar evento ao backend;
+   * mostrar tela de confirmação/cancelamento se possível.
+
+3. No Android, usar App Widgets oficiais.
+
+4. No iOS, avaliar WidgetKit e limitações reais de interação. Não prometer comportamento que o iOS não permite.
+
+5. Criar tutorial ensinando o familiar/cuidador a colocar o widget na tela inicial.
+
+Gatilho 3 — Notificação fixa no Android:
+
+Implementar notificação persistente opcional no Android com botão SOS.
+
+Objetivo:
+
+Permitir acionamento rápido pela barra de notificações, mesmo sem abrir o app.
+
+Requisitos:
+
+1. Notificação clara:
+   “Me Lembra Aí ativo”
+   “Toque em SOS para chamar ajuda”
+
+2. Ações da notificação:
+
+   * Acionar SOS;
+   * Abrir app;
+   * Pausar monitoramento.
+
+3. Usar Foreground Service apenas quando necessário e permitido.
+
+4. Exibir notificação transparente ao usuário, sem esconder o monitoramento.
+
+5. Respeitar regras do Android sobre execução em segundo plano.
+
+6. Permitir ativar/desativar nas configurações.
+
+7. Explicar impacto de bateria.
+
+Gatilho 4 — Chacoalhada do celular:
+
+Implementar acionamento por movimento intencional do aparelho.
+
+Requisitos Android:
+
+1. Usar APIs oficiais:
+
+   * SensorManager;
+   * SensorEventListener;
+   * Accelerometer;
+   * Linear Acceleration, se adequado;
+   * Gyroscope, se ajudar a reduzir falso positivo.
+
+2. Verificar se o aparelho possui acelerômetro.
+
+3. Se não houver sensor compatível, desativar a função e mostrar:
+   “Este aparelho não suporta SOS por chacoalhada.”
+
+4. Criar algoritmo de detecção:
+
+   * movimento forte;
+   * repetição;
+   * janela de tempo;
+   * filtro contra ruído;
+   * limite mínimo de força;
+   * cooldown após acionamento.
+
+5. Padrão sugerido:
+   “Chacoalhar forte 3 vezes em até 5 segundos.”
+
+6. Antes de enviar SOS:
+
+   * tocar alarme;
+   * vibrar;
+   * mostrar tela:
+     “SOS será enviado em 10 segundos.”
+   * botão grande:
+     “Estou bem / Cancelar SOS.”
+
+7. Se não cancelar, enviar SOS.
+
+8. Criar tela de teste:
+
+   * usuário testa a chacoalhada;
+   * app informa se detectou;
+   * não envia SOS real durante o teste.
+
+Requisitos iOS:
+
+1. Usar Core Motion quando permitido.
+
+2. Não prometer monitoramento permanente com app fechado.
+
+3. Informar que no iPhone o recurso pode funcionar melhor com o app aberto ou em estados permitidos pelo sistema.
+
+4. Criar fallback com widget, botão no app, atalhos e backend.
+
+Gatilho 5 — Detecção de queda:
+
+Implementar detecção de possível queda como recurso complementar.
+
+Requisitos:
+
+1. Usar sensores disponíveis:
+
+   * acelerômetro;
+   * giroscópio;
+   * mudança brusca de aceleração;
+   * possível impacto;
+   * período de imobilidade após impacto.
+
+2. Não considerar como diagnóstico médico.
+
+3. Fluxo:
+
+   * detectar evento suspeito;
+   * tocar alarme;
+   * mostrar:
+     “Detectamos uma possível queda. Você está bem?”
+   * botão:
+     “Estou bem”
+   * se não houver resposta em 30 segundos, acionar SOS.
+
+4. Permitir configurar:
+
+   * ativar/desativar;
+   * sensibilidade;
+   * tempo de resposta;
+   * contatos acionados.
+
+5. Evitar falsos positivos:
+
+   * celular jogado na cama;
+   * queda do aparelho sem queda da pessoa;
+   * ônibus/carro;
+   * movimentos bruscos comuns.
+
+6. Registrar tipo de evento:
+   “possível queda detectada”.
+
+Gatilho 6 — Detecção de inatividade:
+
+Implementar monitoramento de inatividade como recurso opcional.
+
+Exemplo de uso:
+
+O idoso costuma confirmar lembretes ou interagir com o app todos os dias. Se ficar muitas horas sem atividade, o app pode avisar familiares.
+
+Requisitos:
+
+1. Permitir configurar janela de inatividade:
+
+   * 6 horas;
+   * 12 horas;
+   * 24 horas;
+   * horário personalizado.
+
+2. Antes de alertar familiar, perguntar ao usuário:
+   “Está tudo bem?”
+
+3. Se não houver resposta:
+
+   * enviar alerta preventivo;
+   * não classificar imediatamente como emergência máxima, a menos que configurado.
+
+4. Exemplo de mensagem:
+   “Não houve interação de João com o app nas últimas 12 horas.”
+
+5. Diferenciar:
+
+   * alerta preventivo;
+   * SOS real.
+
+Gatilho 7 — Botão físico Bluetooth / pulseira SOS:
+
+Implementar arquitetura preparada para botão físico Bluetooth ou pulseira SOS.
+
+Objetivo:
+
+Essa pode ser uma das soluções mais confiáveis para idosos, porque a pessoa pode usar um botão no bolso, chaveiro, colar ou pulseira.
+
+Requisitos:
+
+1. Pesquisar e usar dispositivos reais compatíveis com Bluetooth/BLE.
+
+2. Não inventar hardware próprio sem necessidade.
+
+3. Implementar suporte a BLE no app, quando definido o dispositivo.
+
+4. Permitir pareamento:
+
+   * adicionar botão SOS;
+   * testar botão;
+   * remover botão.
+
+5. Ao pressionar o botão:
+
+   * app recebe evento;
+   * aciona fluxo SOS;
+   * backend dispara alertas.
+
+6. Considerar:
+
+   * bateria do botão;
+   * reconexão;
+   * distância do celular;
+   * compatibilidade Android/iOS;
+   * permissões Bluetooth;
+   * teste periódico.
+
+7. Criar aviso:
+   “Teste seu botão SOS regularmente.”
+
+Gatilho 8 — Comando de voz:
+
+Avaliar viabilidade de comando de voz, sem prometer escuta contínua indevida.
+
+Comandos desejados:
+
+* “Lemi, socorro”
+* “Lemi, chama ajuda”
+* “Lemi, SOS”
+
+Requisitos:
+
+1. Avaliar limitações de Android e iOS para escuta contínua.
+
+2. Não implementar microfone sempre ativo sem consentimento claro.
+
+3. Não prometer funcionamento com app encerrado.
+
+4. Usar apenas APIs permitidas.
+
+5. Tratar como recurso complementar.
+
+6. Exigir confirmação/cancelamento quando possível.
+
+7. Informar privacidade:
+
+   * quando o microfone é usado;
+   * por que é usado;
+   * como desativar.
+
+Gatilho 9 — Atalhos do sistema:
+
+Avaliar criação de atalhos para facilitar acionamento.
+
+Android:
+
+1. App Shortcuts.
+2. Tile de configurações rápidas, se viável.
+3. Widget na tela inicial.
+4. Notificação com ação SOS.
+
+iOS:
+
+1. Shortcuts.
+2. WidgetKit, respeitando limitações.
+3. Integrações permitidas pelo sistema.
+
+Não prometer acionamento que o sistema operacional não permita.
+
+Backend SOS:
+
+Criar backend robusto para receber e tratar eventos SOS.
+
+Requisitos:
+
+1. Endpoint seguro:
+   POST /sos/events
+
+2. Campos mínimos:
+
+   * userId;
+   * triggerType;
+   * latitude;
+   * longitude;
+   * accuracy;
+   * batteryLevel;
+   * deviceInfo;
+   * createdAt;
+   * emergencyContacts;
+   * status.
+
+3. Status possíveis:
+
+   * received;
+   * notifying_contacts;
+   * calling_primary;
+   * waiting_confirmation;
+   * confirmed_by_contact;
+   * escalated;
+   * resolved;
+   * cancelled;
+   * failed.
+
+4. Usar fila de processamento:
+
+   * BullMQ/Redis;
+   * RabbitMQ;
+   * SQS;
+   * ou solução equivalente real.
+
+5. Evitar perda de evento.
+
+6. Ter retry controlado.
+
+7. Ter rate limit.
+
+8. Ter logs de auditoria.
+
+9. Ter painel administrativo para verificar eventos.
+
+Ligação via API de voz:
+
+Implementar chamadas pelo servidor, não apenas pelo celular do usuário.
+
+Provedores possíveis:
+
+1. Twilio Voice API.
+2. Zenvia/TotalVoice.
+3. Vonage Voice API.
+4. Outro provedor real com documentação pública.
+
+Requisitos:
+
+1. Backend cria chamada para familiar principal.
+
+2. Mensagem de voz:
+   “Alerta do Me Lembra Aí. [Nome] acionou o SOS. Verifique imediatamente. Para confirmar que recebeu, pressione 1.”
+
+3. Se familiar pressionar 1:
+
+   * marcar como confirmado;
+   * parar escalonamento;
+   * notificar demais familiares que alguém confirmou.
+
+4. Se não atender:
+
+   * tentar próximo contato.
+
+5. Se cair na caixa postal:
+
+   * marcar como não confirmado;
+   * tentar próximo contato.
+
+6. Registrar:
+
+   * horário da chamada;
+   * status;
+   * duração;
+   * contato chamado;
+   * confirmação.
+
+7. Implementar limite de chamadas para evitar abuso.
+
+Push notification:
+
+Usar solução validada como Firebase Cloud Messaging.
+
+Requisitos:
+
+1. Enviar push para familiares cadastrados.
+
+2. Push deve conter:
+
+   * título: “SOS acionado”
+   * corpo: “[Nome] precisa de ajuda.”
+   * dados internos do evento.
+
+3. Ao tocar:
+
+   * abrir tela do evento SOS.
+
+4. Evitar colocar dados sensíveis excessivos no payload.
+
+5. Tratar permissões de notificação no Android/iOS.
+
+SMS e WhatsApp:
+
+Implementar como canais complementares, não como único canal.
+
+SMS:
+
+1. Enviar mensagem curta:
+   “[Nome] acionou SOS pelo Me Lembra Aí. Localização: [link]. Horário: [hora].”
+
+2. Usar provedor real de SMS.
+
+WhatsApp:
+
+1. Usar WhatsApp Business API oficial ou provedor autorizado.
+
+2. Respeitar templates e políticas.
+
+3. Não depender apenas do WhatsApp para emergência.
+
+Localização:
+
+Implementar envio de localização com consentimento.
+
+Requisitos:
+
+1. Solicitar permissão clara.
+
+2. Usar localização atual quando possível.
+
+3. Se não conseguir localização atual, usar última localização conhecida e indicar isso.
+
+4. Enviar link do mapa.
+
+5. Informar precisão.
+
+6. Não rastrear continuamente sem consentimento.
+
+7. Permitir desativar localização.
+
+UX para idosos:
+
+1. Botões grandes.
+2. Texto simples.
+3. Alto contraste.
+4. Poucas etapas.
+5. Feedback sonoro.
+6. Feedback tátil com vibração.
+7. Confirmações claras.
+8. Tela de teste.
+9. Modo familiar/cuidador para configurar.
+10. Explicação simples:
+    “Escolha como você quer pedir ajuda.”
+
+Tela de configuração sugerida:
+
+Título:
+“Formas de pedir ajuda”
+
+Opções:
+
+1. Botão SOS no app.
+2. Widget na tela inicial.
+3. SOS na notificação.
+4. Chacoalhar o celular.
+5. Detectar possível queda.
+6. Aviso por inatividade.
+7. Botão/pulseira Bluetooth.
+8. Comando de voz.
+
+Para cada opção:
+
+* Ativar/desativar;
+* Testar;
+* Explicar limitações;
+* Configurar sensibilidade quando aplicável.
+
+Tela de familiares:
+
+1. Cadastrar até 3 ou mais contatos.
+2. Definir ordem de emergência.
+3. Confirmar telefone.
+4. Informar se o familiar tem app instalado.
+5. Permitir convite para familiar instalar o app.
+6. Permitir testar alerta.
+
+Tela de teste SOS:
+
+Criar ambiente de teste que não acione emergência real.
+
+Opções:
+
+1. Testar ligação local.
+2. Testar push.
+3. Testar SMS.
+4. Testar chacoalhada.
+5. Testar botão Bluetooth.
+6. Testar localização.
+7. Testar fluxo completo em modo simulado.
+
+Segurança e privacidade:
+
+1. Solicitar consentimento claro.
+
+2. Explicar:
+
+   * sensores usados;
+   * localização;
+   * contatos;
+   * notificações;
+   * chamadas.
+
+3. Não usar Accessibility Service para simular toques.
+
+4. Não usar auto-clicker.
+
+5. Não automatizar tela do discador.
+
+6. Não burlar restrições do sistema operacional.
+
+7. Não prometer ligação automática local com app fechado em todos os aparelhos.
+
+8. Proteger dados dos usuários.
+
+9. Criptografar dados sensíveis em trânsito.
+
+10. Criar logs de auditoria.
+
+11. Criar política de retenção de eventos SOS.
+
+12. Criar limite contra disparos acidentais ou maliciosos.
+
+13. Criar cooldown após SOS automático.
+
+14. Permitir cancelar SOS.
+
+15. Permitir desativar qualquer gatilho.
+
+Limitações obrigatórias que devem ser documentadas:
+
+1. Android permite mais recursos em segundo plano, mas há restrições de bateria, fabricantes e versões do sistema.
+
+2. iOS não permite que apps comuns monitorem tudo continuamente com o app totalmente fechado.
+
+3. Chacoalhada pode gerar falso positivo.
+
+4. Detecção de queda por celular não substitui dispositivo médico dedicado.
+
+5. Voz não deve ser tratada como canal único.
+
+6. WhatsApp não deve ser canal único de emergência.
+
+7. A solução mais confiável é combinar múltiplos gatilhos com backend e ligação via API de voz.
+
+Implementação por fases:
+
+Fase 1 — MVP confiável:
+
+1. Botão SOS dentro do app.
+2. Widget SOS.
+3. Notificação fixa no Android.
+4. Backend de eventos SOS.
+5. Push para familiares.
+6. Ligação via API de voz.
+7. Envio de localização.
+8. Histórico de SOS.
+9. Escalonamento entre familiares.
+
+Fase 2 — Sensores:
+
+1. Chacoalhada.
+2. Detecção de possível queda.
+3. Inatividade.
+4. Tela de teste de sensores.
+5. Ajuste de sensibilidade.
+
+Fase 3 — Hardware e recursos avançados:
+
+1. Botão Bluetooth/pulseira SOS.
+2. Comando de voz.
+3. Integrações com wearables.
+4. Painel do cuidador.
+5. Central de atendimento ou cuidador profissional.
+
+Critérios de aceite:
+
+1. O usuário consegue acionar SOS pelo app.
+
+2. O usuário consegue acionar SOS por widget.
+
+3. No Android, o usuário consegue acionar SOS por notificação fixa.
+
+4. O backend recebe eventos SOS.
+
+5. Familiares recebem push.
+
+6. Backend consegue iniciar ligação via API de voz.
+
+7. Se familiar 1 não confirmar, sistema tenta familiar 2.
+
+8. Localização é enviada quando autorizada.
+
+9. Histórico registra o evento.
+
+10. Chacoalhada funciona em aparelhos compatíveis.
+
+11. Chacoalhada tem tela de cancelamento antes do SOS.
+
+12. Possível queda não dispara emergência sem confirmação/cancelamento prévio, salvo configuração avançada.
+
+13. Inatividade gera alerta preventivo, não necessariamente SOS imediato.
+
+14. iOS exibe limitações corretamente.
+
+15. O app não usa automação de tela, auto-clicker ou Accessibility Service indevido.
+
+16. O sistema informa claramente que o SOS é complementar e não substitui serviços oficiais de emergência.
+
+17. O usuário consegue testar cada canal sem disparar emergência real.
+
+Entregáveis esperados:
+
+1. Documento de arquitetura.
+2. Diagrama do fluxo SOS.
+3. Modelo de dados.
+4. Endpoints backend.
+5. Fluxo de telas.
+6. Lista de permissões Android/iOS.
+7. Estratégia de background por plataforma.
+8. Implementação do MVP.
+9. Testes em aparelhos reais Android e iOS.
+10. Documentação de limitações.
+11. Plano de publicação em Play Store/App Store respeitando políticas.
+12. Plano de custos de voz/SMS/push.
+13. Plano de evolução para botão Bluetooth/pulseira.
+
+Resultado esperado:
+
+Transformar o **Me Lembra Aí** em um app de lembretes com camada de cuidado familiar e segurança, permitindo que idosos acionem ajuda por vários caminhos, com backend responsável por garantir o contato com familiares.
