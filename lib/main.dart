@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
+import 'services/fall_detector_service.dart';
 import 'services/notification_service.dart';
 import 'services/sos_listener_service.dart';
 import 'services/sos_protection_service.dart';
@@ -23,6 +24,28 @@ import 'features/vehicle/vehicle_screen.dart';
 
 bool _onboardingVisto = false;
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
+
+/// Entrypoint headless (sem UI), rodado num FlutterEngine separado criado
+/// pelo SosProtectionService.kt nativo quando "Modo Proteção" está ativo.
+/// Mantém o detector de queda funcionando mesmo com o app fechado — sem
+/// isso, o FlutterEngine (e todo o Dart, incluindo FallDetectorService)
+/// é destruído junto com a Activity quando o usuário fecha o app; o
+/// Foreground Service nativo sozinho não mantém nenhum código Dart vivo.
+/// Uma queda detectada aqui dispara o SOS direto, sem a tela de
+/// confirmação/cancelamento de 5s do fluxo em primeiro plano — não há
+/// tela pra mostrar esse diálogo neste contexto.
+@pragma('vm:entry-point')
+void fallDetectorEntrypoint() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (_) {
+    // já inicializado nativamente
+  }
+  FallDetectorService.start();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

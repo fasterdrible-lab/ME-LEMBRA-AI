@@ -10,12 +10,22 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import io.flutter.FlutterInjector
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
 
 /**
  * Foreground Service que exibe notificação persistente "Modo proteção ativo".
  *
- * Mantém o processo Flutter vivo mesmo quando o usuário fecha o app,
- * garantindo que o SosListenerService (Firestore) e o FCM continuem ativos.
+ * Mantém o processo Android vivo, mas isso sozinho NÃO mantém nenhum código
+ * Dart rodando: MainActivity usa o ciclo de vida padrão do FlutterActivity,
+ * então o FlutterEngine (e tudo que roda nele) é destruído junto com a
+ * Activity quando o usuário fecha o app. Por isso este serviço cria seu
+ * próprio FlutterEngine headless (sem UI), rodando o entrypoint
+ * `fallDetectorEntrypoint` (lib/main.dart) — é isso que mantém o detector de
+ * queda funcionando de verdade com o app fechado. O canal "call" é
+ * registrado nesse engine também, pra caso o detector precise ligar pro
+ * contato de SOS.
  *
  * Iniciado e parado via MethodChannel "com.melembra.ai/protection".
  */
@@ -39,6 +49,8 @@ class SosProtectionService : Service() {
         }
     }
 
+    private var flutterEngine: FlutterEngine? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -46,10 +58,30 @@ class SosProtectionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
+        startHeadlessFlutterIfNeeded()
         return START_STICKY
     }
 
+    override fun onDestroy() {
+        flutterEngine?.destroy()
+        flutterEngine = null
+        super.onDestroy()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun startHeadlessFlutterIfNeeded() {
+        if (flutterEngine != null) return
+        val engine = FlutterEngine(applicationContext)
+        engine.dartExecutor.executeDartEntrypoint(
+            DartExecutor.DartEntrypoint(
+                FlutterInjector.instance().flutterLoader().findAppBundlePath(),
+                "fallDetectorEntrypoint"
+            )
+        )
+        CallChannel.register(engine, applicationContext)
+        flutterEngine = engine
+    }
 
     private fun buildNotification(): Notification {
         val mainIntent = Intent(this, MainActivity::class.java).apply {
