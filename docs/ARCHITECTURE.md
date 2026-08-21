@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-08-20 (sessão 21)
+> Última atualização: 2026-08-21 (sessão 22)
 
 ---
 
@@ -168,17 +168,21 @@ Permite leitura do convite sem acesso direto a `users/{uid}`.
 ### `chats/{chatId}/messages/{msgId}`
 ```json
 {
-  "senderId": "string",
+  "senderUid": "string",
   "text": "string | null",
   "audioUrl": "string | null",
   "durationMs": "number | null",
   "type": "text | audio",
-  "createdAt": "timestamp"
+  "sentAt": "timestamp"
 }
 ```
-`chatId` = concatenação ordenada dos dois UIDs (garantido por `ChatService`).
-Exclusão: `firestore.rules` permite `delete` só quando `senderUid` da
-mensagem é o próprio usuário (long-press na bolha em `chat_screen.dart`).
+`chatId` = as duas UIDs ordenadas e unidas por `_`
+(`ChatService.pairId()`: `sorted([a,b]).join('_')`). Exclusão:
+`firestore.rules` permite `delete` só quando `senderUid` da mensagem é o
+próprio usuário (long-press na bolha em `chat_screen.dart`).
+> **Correção (sessão 22):** este schema estava desatualizado (documentava
+> `senderId`/`createdAt`, mas o código sempre usou `senderUid`/`sentAt`)
+> — corrigido pra bater com `lib/services/chat_service.dart`.
 
 ---
 
@@ -256,19 +260,55 @@ No familiar com app encerrado (via VPS):
        ))
 ```
 
-### Foreground Service (Modo Proteção)
+### Foreground Service (Modo Proteção) + detector de queda em segundo plano
 
 ```
 Usuário ativa "Modo Proteção" na ConfigScreen:
   SosProtectionService.start()
     └─ MethodChannel "protection" → SosProtectionService.kt.start(context)
          └─ startForeground(9001, notification(PRIORITY_LOW, ONGOING))
-              → processo Flutter permanece vivo indefinidamente
+              └─ onStartCommand → startHeadlessFlutterIfNeeded()
+                   └─ FlutterEngine(applicationContext) [engine NOVO, headless]
+                        ├─ executeDartEntrypoint("fallDetectorEntrypoint")
+                        │    └─ lib/main.dart: Firebase.initializeApp() +
+                        │         FallDetectorService.start()
+                        └─ CallChannel.register(engine, context)
+                             (mesmo canal "com.melembra.ai/call" do MainActivity,
+                              extraído pra CallChannel.kt — reaproveitado aqui)
 
 main() ao reiniciar:
   SosProtectionService.restoreIfEnabled()
     └─ SharedPreferences: cfg_modo_protecao == true → start()
 ```
+
+> **Sessão 22 — por que precisou de um engine separado**: o Foreground
+> Service nativo, sozinho, mantém o *processo* Android vivo, mas
+> `MainActivity` usa o ciclo de vida padrão do `FlutterActivity`
+> (`shouldDestroyEngineWithHost` implícito `true`) — o `FlutterEngine`
+> ligado à Activity, e todo o Dart rodando nele (`FallDetectorService`,
+> `SosListenerService`), é destruído junto com a Activity quando o app é
+> fechado. O Foreground Service, sozinho, **não mantinha nenhum código
+> Dart vivo**, apesar do comentário antigo no código dizer o contrário.
+> Por isso `SosProtectionService.kt` agora cria seu próprio
+> `FlutterEngine` headless (via `DartExecutor.executeDartEntrypoint`,
+> API moderna que dispensa `Application` customizada ou plugin de
+> terceiros como `workmanager`) — é esse engine separado que mantém o
+> detector de queda rodando de verdade com o app fechado.
+>
+> Uma queda detectada nesse caminho dispara `SosService.trigger()`
+> **direto, sem a tela de confirmação/cancelamento de 5s** do fluxo em
+> primeiro plano (`_acionarSOS()` em `elderly_screen.dart`) — não há
+> `BuildContext`/`Navigator` num engine headless pra mostrar diálogo.
+>
+> **SOS por 5 toques de volume não se beneficia disso**: captura de tecla
+> física (`onKeyDown`) exige uma Activity em primeiro plano com foco de
+> janela, o que nenhum engine em segundo plano resolve — só Accessibility
+> Service resolveria, e essa decisão continua sendo não implementar.
+>
+> **Fora de escopo, lacuna conhecida**: `SosListenerService` (o listener
+> Firestore que avisa o cuidador de um SOS de um familiar monitorado)
+> tem exatamente o mesmo problema de hoje (`StreamSubscription` presa ao
+> engine da Activity) e não foi corrigido nesta sessão.
 
 ### SOS por Teclas de Volume
 
@@ -332,7 +372,11 @@ Usuário toca "Falar Comando" (ou já está no meio de uma conversa):
     │    "Até logo!", _encerrarConversa(), para de escutar
     ├─ regras locais rápidas (ouvir lembretes / alertas / adicionar na lista)
     │    → resolve na hora, sem rede
-    └─ qualquer outra frase:
+    ├─ já em modo "coletando lembrete" (_coletandoLembrete == true)?
+    │    → _mesclarSlots(texto): extrai dia/hora localmente e
+    │      determinística (_extrairData/_extrairHora), NUNCA chama a IA
+    │      de novo neste modo → _finalizarOuPerguntarProximoCampo()
+    └─ qualquer outra frase (1ª vez desta conversa que cai aqui):
          _lembretesParaContextoIA() → resumo leve dos lembretes reais
            (título/tipo/data-hora; itens da lista quando for tipo Compras)
          AiCommandService.interpretar(texto, historico, lembretesContexto)
@@ -348,8 +392,13 @@ Usuário toca "Falar Comando" (ou já está no meio de uma conversa):
            │         (ações: criar_lembrete | ouvir_lembretes |
            │          adicionar_item_lista | consultar_alertas |
            │          perguntar | responder)
-           ├─ sucesso → _executarAcaoIA(acao) despacha pro handler certo;
-           │    turno é acrescentado ao histórico local (máx. 3 trocas)
+           ├─ acao == 'perguntar' → NÃO fala a pergunta da IA; entra em
+           │    modo de coleta local (_coletandoLembrete = true),
+           │    _mesclarSlots(_primeiroTextoConversa) e
+           │    _finalizarOuPerguntarProximoCampo() decide o que perguntar
+           │    (só dia/hora, com fala própria, local)
+           ├─ outra ação com sucesso → _executarAcaoIA(acao) despacha pro
+           │    handler certo; turno acrescentado ao histórico (máx. 3)
            └─ falha/timeout/sem internet → retorna null →
                 cai no parser local de sempre (_criarLembreteDoTexto)
 
@@ -358,9 +407,29 @@ Ao final de cada turno (se a conversa não foi encerrada):
   _iniciarEscuta() de novo, sem precisar tocar o botão.
 ```
 
+> **Sessão 22 (parte 2) — por que a coleta de dia/hora saiu da IA**: em
+> testes ao vivo, a IA (`openai/gpt-oss-20b`) repetidamente "esquecia"
+> dado já informado em turnos anteriores (perguntava tipo depois do
+> usuário já ter dito, não reconhecia "15" como resposta a "que horas?",
+> repetia a mesma pergunta) — mesmo recebendo o histórico da conversa a
+> cada chamada. Pesquisa confirmou que isso é um padrão conhecido do
+> mercado: Rasa (framework de chatbot mais usado) usa um extrator
+> determinístico (Duckling) pra data/hora dentro de "Forms", não o
+> modelo de linguagem; a própria OpenAI recomenda, pra function calling
+> multi-turno, não depender do modelo lembrar dado que o código já sabe
+> ("offload the burden from the model and use code where possible").
+> Por isso: a partir do primeiro `perguntar` da IA, a conversa entra em
+> modo de coleta 100% local — `_extrairData`/`_extrairHora` (novos,
+> nullable — diferente de `_parsearDataHora`, que sempre assume "agora"
+> quando não acha nada) extraem dia/hora turno a turno sem nenhuma
+> chamada de IA adicional; título/tipo/recorrência continuam vindo do
+> parser local de sempre (`_limparTitulo`/`_inferirTipo`/
+> `_inferirRecorrencia`, aplicados sobre `_primeiroTextoConversa`).
+
 **Guardrails contra alucinação**: ação `perguntar` (pede esclarecimento em
-vez de inventar dado faltante, ex. hora de um lembrete); grounding real via
-`contexto.lembretes` (a IA só pode falar sobre lembretes que de fato
+vez de inventar dado faltante — mas a extração de dia/hora em si agora é
+local e determinística, não mais responsabilidade da IA); grounding real
+via `contexto.lembretes` (a IA só pode falar sobre lembretes que de fato
 existem); histórico limitado (custo/deriva); enum de ações fechado e
 validado no servidor (`ACOES_VALIDAS`); regra explícita no prompt contra
 inventar lembretes/alertas/SOS fora do contexto fornecido. Sem
@@ -475,7 +544,8 @@ android/
     AndroidManifest.xml              # permissões, receivers, services, API key Maps
     kotlin/com/melembra/ai/
       MainActivity.kt                # 5 channels: widget, call, protection, vol_control, vol_events
-      SosProtectionService.kt        # Foreground Service "Modo proteção ativo"
+      CallChannel.kt                 # canal "call", compartilhado com o engine headless
+      SosProtectionService.kt        # Foreground Service + FlutterEngine headless (detector de queda)
       RemindersWidget.kt             # AppWidget de lembretes
     res/
       xml/widget_info.xml
