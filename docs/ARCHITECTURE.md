@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-08-21 (sessão 22)
+> Última atualização: 2026-08-26 (sessão 23)
 
 ---
 
@@ -111,6 +111,28 @@
 ```
 
 > **SharedPreferences (local):** contatos SOS armazenados como `cfg_sos_numeros` (`List<String>`, até 3 números). Campo legado `cfg_sos_numero` é migrado automaticamente na primeira leitura.
+
+### `users/{uid}/molly_memory/{memId}`
+```json
+{
+  "type": "string (ex.: nome_preferido, horario_almoco, rotinas...)",
+  "value": "string",
+  "source": "string (ex.: conversa, configuracoes)",
+  "confidence": "number (0.0–1.0)",
+  "userApproved": "bool",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp"
+}
+```
+Memória de longo prazo da MOLLY (TAREFA 8). **Privada ao dono** —
+diferente de `reminders`, a regra do Firestore não dá acesso de leitura à
+família (ver `firestore.rules`). `LongTermMemoryService.salvar()` recusa
+gravar sem `userApproved: true` explícito **e** sem
+`SettingsService.getMollyMemoriaAutorizada()` (interruptor geral, padrão
+`false`) — nunca escreve por padrão.
+
+> **SharedPreferences (local):** `cfg_molly_memoria_autorizada` (bool,
+> padrão `false`) — "A MOLLY pode lembrar minhas preferências?" (TAREFA 9).
 
 ### `users/{uid}/family/{otherUid}`
 ```json
@@ -522,8 +544,94 @@ lib/
       child_screen.dart
       child_monitor_screen.dart
     elderly/
-      elderly_screen.dart            # tela principal do idoso
+      elderly_screen.dart            # tela principal do idoso (ainda com
+                                      # o "Falar Comando" original — ver
+                                      # features/molly/ abaixo)
       meus_lembretes_screen.dart
+    molly/                           # em construção (sessão 23) — ver
+                                      # docs/MOLLY_ARCHITECTURE_ANALYSIS.md
+      screens/
+        molly_screen.dart            # tela principal (TAREFA 6) — rota
+                                      # /molly, aditiva, sem navegação
+                                      # apontando pra ela ainda
+        molly_memory_screen.dart     # "O que a Molly lembra" (TAREFA 9) —
+                                      # rota /molly-memory, idem aditiva
+      widgets/
+        listening_indicator.dart     # "Estou ouvindo"/"Pensando"/"Falando"
+      memory/
+        short_term_memory.dart       # ShortTermMemory (TAREFA 7) — histórico
+                                      # de trocas (p/ IA) + slots dia/hora
+                                      # (fora do histórico da IA, de propósito)
+        long_term_memory.dart        # LongTermMemoryService (TAREFA 8) —
+                                      # users/{uid}/molly_memory, nunca grava
+                                      # sem userApproved + opt-in geral
+      models/
+        molly_memory_entry.dart      # type/value/source/createdAt/updatedAt/
+                                      # confidence/userApproved
+        molly_user_context.dart      # retrato controlado do usuário (TAREFA 10)
+        molly_intent.dart            # MollyIntentHints — sinal local de
+                                      # "parece pedido de lembrete" (TAREFA 14)
+                                      # e "parece buscar companhia" (TAREFA 15);
+                                      # não ligado a nenhuma decisão ainda
+        molly_message.dart           # mensagem de conversa (autor/texto)
+        molly_tool_result.dart       # resultado de um turno, sem TTS embutido
+        molly_risk_level.dart        # enum LOW/MEDIUM/CRITICAL (metadado)
+        molly_tool_definition.dart   # nome/descrição/parâmetros/risco/executar
+      services/
+        molly_agent_service.dart     # núcleo: texto -> AiCommandService ->
+                                      # despacha para MollyRiskPolicy ou
+                                      # métodos internos. Sem estado, nunca
+                                      # acessa Firestore direto.
+        molly_tool_registry.dart     # catálogo de ferramentas (TAREFA 3)
+        molly_risk_policy.dart       # LOW roda direto; MEDIUM roda direto
+                                      # exceto se ambíguo; CRITICAL sempre
+                                      # confirma exceto emergência
+                                      # autorizada (TAREFA 4)
+        molly_context_service.dart   # MollyContextService (TAREFA 10) —
+                                      # agrega nome/perfil/lembretes/
+                                      # familiares/config/preferências/
+                                      # conversa; só lembretesParaIA vai à IA
+        molly_prompt_service.dart    # Personalidade (TAREFA 11) — descrição
+                                      # formal + contemLinguagemTecnica();
+                                      # respostas curtas (TAREFA 12) —
+                                      # resumoCurto<T>() (1-3 frases, nunca
+                                      # item por item)
+        molly_briefing_service.dart  # Briefing matinal (TAREFA 13) — fala
+                                      # real com os lembretes do dia; usado
+                                      # por notification_service.dart ao
+                                      # tocar a notificação das 8h
+                                      #
+                                      # (TAREFA 15: modoCompanhia — regras
+                                      # de tom/guardrail — mora em
+                                      # molly_prompt_service.dart, acima)
+        wake_word_service.dart       # WakeWordService (TAREFA 16) — só
+                                      # abstração + stub indisponível;
+                                      # pesquisa de Picovoice Porcupine
+                                      # documentada no arquivo. Sem
+                                      # dependência nativa nova
+        offline_intent_service.dart  # OfflineIntentService (TAREFA 17) —
+                                      # socorro/meus lembretes/ligar para X/
+                                      # que horas/confirmar remédio, sem IA.
+                                      # LIGADO de verdade: MollyAgentService
+                                      # chama isso antes de qualquer IA.
+                                      # TAREFA 18: + possivelEmergencia
+                                      # (frases suaves — confirmação visual
+                                      # com contagem, não disparo direto)
+        molly_voice_service.dart     # STT+TTS (TAREFA 5) — única classe
+                                      # instanciável da MOLLY; estados
+                                      # idle/listening/thinking/speaking/
+                                      # error via ValueNotifier. Detecção
+                                      # de "SOCORRO" NÃO mora aqui.
+      tools/
+        reminder_tool.dart           # createReminder/get{Today,Tomorrow}
+                                      # Reminders/updateReminder/deleteReminder/
+                                      # confirmReminder/getReminderHistory
+        family_tool.dart             # getFamilyMembers/sendFamilyMessage/
+                                      # callFamilyMember (chat, não disca — sem
+                                      # telefone por familiar, ver análise)
+        location_tool.dart           # getCurrentLocation
+        profile_tool.dart            # getUserProfile
+        molly_fala_utils.dart        # horaFalada() compartilhado
     family/
       family_screen.dart
       chat_screen.dart               # chat texto + áudio long-press
@@ -569,6 +677,15 @@ test/
   create_reminder_screen_test.dart   # 9 widget tests
   profile_selection_screen_test.dart # regressão BUG-001 (FcmService.init() no fluxo de perfil)
   reminder_service_test.dart         # 6 testes falhando desde abril/2026, pré-existente
+  molly_risk_policy_test.dart        # 4 testes da TAREFA 4 (política de risco), sem mocks de Firebase
+  molly_screen_test.dart             # 4 testes de estrutura da TAREFA 6, sem tocar o microfone
+  molly_prompt_service_test.dart     # 8 testes das TAREFAs 11/12, 100% puro Dart
+  molly_briefing_service_test.dart   # 5 testes da TAREFA 13, 100% puro Dart
+  molly_intent_test.dart             # testes das TAREFAs 14/15, 100% puro Dart
+  wake_word_service_test.dart        # 4 testes da TAREFA 16, 100% puro Dart
+  offline_intent_service_test.dart   # 13 testes das TAREFAs 17/18, 100% puro Dart
+  short_term_memory_test.dart        # 6 testes da TAREFA 7, 100% puro Dart
+  molly_memory_screen_test.dart      # 4 testes da TAREFA 9, incluindo o interruptor de ponta a ponta
   support/
     firebase_core_mocks.dart         # mocks do Firebase Core p/ testes de widget
 

@@ -1,0 +1,1268 @@
+# PROMPT MESTRE — IMPLEMENTAÇÃO DA MOLLY INTELIGENTE
+
+Você é um agente sênior de engenharia de software responsável por evoluir o aplicativo **ME-LEMBRA-AI**, repositório:
+
+`https://github.com/fasterdrible-lab/ME-LEMBRA-AI.git`
+
+O objetivo é transformar a **MOLLY** em uma assistente pessoal inteligente, conversacional e segura, especialmente adaptada para usuários 60+, sem comprometer as funcionalidades já existentes do aplicativo.
+
+O projeto atual é desenvolvido em **Flutter/Dart**, utiliza **Firebase Auth, Firestore, Firebase Cloud Messaging, Firebase Storage, notificações locais, STT, TTS, GPS, acelerômetro, chat familiar e SOS**.
+
+A nova arquitetura deve **reaproveitar ao máximo os serviços atuais**, evitando reescrever funções que já existem.
+
+A MOLLY deverá ser capaz de:
+
+* conversar naturalmente por voz e texto;
+* compreender intenção;
+* executar ações dentro do aplicativo;
+* criar e consultar lembretes;
+* interagir com familiares;
+* consultar a rotina do usuário;
+* possuir memória contextual;
+* aprender preferências autorizadas;
+* fornecer briefing diário;
+* ativar funções por voz;
+* possuir modo companhia;
+* operar parcialmente offline;
+* manter SOS e funções críticas independentes da IA;
+* ser simples, amigável e segura para idosos.
+
+---
+
+# PRINCÍPIOS OBRIGATÓRIOS
+
+Antes de alterar qualquer código:
+
+1. Leia:
+
+   * `README.md`
+   * `AGENTE.md`
+   * `DEVLOG.md`
+   * `docs/CURRENT_STATE.md`
+   * `docs/ARCHITECTURE.md`
+   * `docs/TASKS.md`
+
+2. Analise toda a arquitetura atual.
+
+3. Não remova funcionalidades existentes.
+
+4. Não altere o fluxo de autenticação sem necessidade.
+
+5. Não faça chamadas diretas ao Firestore a partir do LLM.
+
+6. Toda ação da IA deve passar por ferramentas controladas.
+
+7. SOS deve funcionar mesmo que:
+
+   * a IA esteja indisponível;
+   * a API esteja fora do ar;
+   * não exista internet;
+   * o serviço de LLM falhe.
+
+8. Nunca permita que uma IA execute automaticamente ações críticas sem regras de segurança.
+
+9. Toda função nova deve ser modular.
+
+10. Preserve compatibilidade com Android.
+
+---
+
+# ARQUITETURA DESEJADA
+
+Criar uma nova camada:
+
+```text
+lib/
+ └── features/
+      └── molly/
+           ├── screens/
+           ├── widgets/
+           ├── models/
+           ├── services/
+           ├── tools/
+           ├── memory/
+           └── controllers/
+```
+
+Estrutura sugerida:
+
+```text
+lib/features/molly/
+
+├── screens/
+│   ├── molly_screen.dart
+│   ├── molly_settings_screen.dart
+│   └── molly_memory_screen.dart
+│
+├── widgets/
+│   ├── molly_avatar.dart
+│   ├── voice_wave.dart
+│   ├── conversation_bubble.dart
+│   └── listening_indicator.dart
+│
+├── models/
+│   ├── molly_message.dart
+│   ├── molly_intent.dart
+│   ├── molly_memory.dart
+│   └── molly_tool_result.dart
+│
+├── services/
+│   ├── molly_agent_service.dart
+│   ├── molly_voice_service.dart
+│   ├── molly_context_service.dart
+│   ├── molly_prompt_service.dart
+│   └── molly_tool_registry.dart
+│
+├── memory/
+│   ├── molly_memory_service.dart
+│   ├── short_term_memory.dart
+│   └── long_term_memory.dart
+│
+├── tools/
+│   ├── reminder_tool.dart
+│   ├── family_tool.dart
+│   ├── sos_tool.dart
+│   ├── location_tool.dart
+│   ├── medication_tool.dart
+│   └── profile_tool.dart
+│
+└── controllers/
+    └── molly_controller.dart
+```
+
+---
+
+# TAREFA 1 — AUDITORIA DA ARQUITETURA ATUAL
+
+Analise o projeto inteiro antes de desenvolver.
+
+Mapeie:
+
+* serviços existentes;
+* funções já implementadas;
+* navegação;
+* Firestore;
+* permissões Android;
+* STT;
+* TTS;
+* SOS;
+* localização;
+* família;
+* chat;
+* notificações;
+* lembretes;
+* detector de queda.
+
+Identifique quais funções podem ser reaproveitadas pela MOLLY.
+
+Produza um documento:
+
+`docs/MOLLY_ARCHITECTURE_ANALYSIS.md`
+
+Inclua:
+
+* funções existentes reutilizáveis;
+* funções ausentes;
+* riscos;
+* dependências;
+* arquitetura recomendada;
+* plano de migração.
+
+Não comece a implementar a IA antes desta análise.
+
+---
+
+# TAREFA 2 — CRIAR O NÚCLEO DA MOLLY
+
+Criar:
+
+`molly_agent_service.dart`
+
+Esse serviço deve ser responsável por:
+
+* receber entrada textual;
+* receber transcrição de voz;
+* preparar contexto;
+* enviar mensagem ao modelo de IA;
+* interpretar a resposta;
+* identificar ferramentas;
+* executar ferramentas autorizadas;
+* retornar resposta final.
+
+Fluxo:
+
+```text
+Usuário
+   ↓
+STT / Texto
+   ↓
+MollyAgentService
+   ↓
+Contexto
+   ↓
+Modelo IA
+   ↓
+Tool Calling
+   ↓
+Serviços internos do app
+   ↓
+Resposta
+   ↓
+TTS
+```
+
+O agente nunca deve acessar Firestore diretamente.
+
+---
+
+# TAREFA 3 — IMPLEMENTAR TOOL CALLING
+
+Criar:
+
+`molly_tool_registry.dart`
+
+Registrar ferramentas permitidas.
+
+Ferramentas iniciais:
+
+```text
+createReminder
+getTodayReminders
+getTomorrowReminders
+updateReminder
+deleteReminder
+
+getFamilyMembers
+sendFamilyMessage
+callFamilyMember
+
+getCurrentLocation
+
+getReminderHistory
+confirmReminder
+
+getUserProfile
+```
+
+Cada ferramenta deve:
+
+* possuir nome;
+* descrição;
+* parâmetros;
+* validação;
+* nível de risco;
+* função correspondente.
+
+Exemplo:
+
+```text
+createReminder({
+  title,
+  date,
+  time,
+  recurrence,
+  category
+})
+```
+
+A ferramenta deve chamar:
+
+`ReminderService`
+
+e não Firestore diretamente.
+
+---
+
+# TAREFA 4 — CLASSIFICAÇÃO DE RISCO
+
+Criar três níveis:
+
+```text
+LOW
+MEDIUM
+CRITICAL
+```
+
+LOW:
+
+* consultar lembretes;
+* consultar horários;
+* consultar perfil.
+
+MEDIUM:
+
+* criar lembrete;
+* enviar mensagem;
+* alterar lembrete.
+
+CRITICAL:
+
+* SOS;
+* chamada telefônica;
+* compartilhar localização;
+* apagar dados sensíveis.
+
+Regras:
+
+LOW:
+executar automaticamente.
+
+MEDIUM:
+confirmar quando houver ambiguidade.
+
+CRITICAL:
+sempre confirmar, exceto quando for um gatilho explícito de emergência já autorizado.
+
+Exemplo:
+
+> "Molly, liga para minha filha."
+
+Resposta:
+
+> "Você quer que eu ligue para Ana?"
+
+---
+
+# TAREFA 5 — VOZ CONVERSACIONAL
+
+Reaproveitar:
+
+* `speech_to_text`;
+* `flutter_tts`.
+
+Criar:
+
+`molly_voice_service.dart`
+
+Responsabilidades:
+
+* iniciar escuta;
+* parar escuta;
+* lidar com silêncio;
+* lidar com ruído;
+* enviar transcrição;
+* falar resposta;
+* cancelar fala;
+* interromper a resposta se o usuário voltar a falar.
+
+Adicionar estados:
+
+```text
+idle
+listening
+thinking
+speaking
+error
+```
+
+---
+
+# TAREFA 6 — TELA PRINCIPAL DA MOLLY
+
+Criar:
+
+`molly_screen.dart`
+
+A interface deve ser especialmente acessível para 60+.
+
+Características:
+
+* botões grandes;
+* alto contraste;
+* textos grandes;
+* poucas opções simultâneas;
+* feedback visual claro;
+* feedback sonoro;
+* botão de microfone grande;
+* indicação "Estou ouvindo";
+* indicação "Pensando";
+* indicação "Falando".
+
+Exemplo visual:
+
+```text
+          MOLLY
+
+     ● Estou ouvindo...
+
+"Como posso ajudar?"
+
+       [ MICROFONE ]
+
+──────────────────
+
+Hoje
+
+Remédio             08:00
+
+Consulta             14:00
+
+Ligar para Ana       18:00
+
+──────────────────
+
+           SOS
+```
+
+Nunca esconda o botão SOS.
+
+---
+
+# TAREFA 7 — MEMÓRIA DE CURTO PRAZO
+
+Criar:
+
+`short_term_memory.dart`
+
+A MOLLY deve lembrar o contexto da conversa atual.
+
+Exemplo:
+
+Usuário:
+
+> "Quando é minha consulta?"
+
+Molly:
+
+> "Amanhã às 14 horas."
+
+Usuário:
+
+> "Me lembra duas horas antes."
+
+A MOLLY deve entender que a referência é a consulta mencionada anteriormente.
+
+Limitar quantidade de mensagens armazenadas.
+
+---
+
+# TAREFA 8 — MEMÓRIA DE LONGO PRAZO
+
+Criar:
+
+`long_term_memory.dart`
+
+Apenas informações explicitamente permitidas devem ser armazenadas.
+
+Exemplos:
+
+```text
+nome_preferido
+familiares
+horario_almoco
+horario_cafe
+preferencia_de_voz
+preferencia_de_lembrete
+rotinas
+```
+
+Criar coleção:
+
+```text
+users/{uid}/molly_memory
+```
+
+Cada memória deve possuir:
+
+```text
+type
+value
+source
+createdAt
+updatedAt
+confidence
+userApproved
+```
+
+Nunca salvar informação sensível automaticamente sem autorização.
+
+---
+
+# TAREFA 9 — TELA "O QUE A MOLLY LEMBRA"
+
+Criar:
+
+`molly_memory_screen.dart`
+
+Usuário deve conseguir:
+
+* visualizar memórias;
+* editar memória;
+* excluir memória;
+* impedir novas memórias;
+* apagar tudo.
+
+Adicionar opção:
+
+```text
+A MOLLY pode lembrar minhas preferências?
+[ SIM / NÃO ]
+```
+
+Privacidade deve ser totalmente transparente.
+
+---
+
+# TAREFA 10 — CONTEXTO DO USUÁRIO
+
+Criar:
+
+`molly_context_service.dart`
+
+Esse serviço pode fornecer:
+
+* nome;
+* perfil;
+* próximos lembretes;
+* histórico recente;
+* familiares;
+* configurações;
+* horário atual;
+* preferências;
+* contexto da conversa.
+
+Nunca enviar todo o Firestore ao modelo.
+
+Enviar apenas informações necessárias.
+
+---
+
+# TAREFA 11 — PERSONALIDADE DA MOLLY
+
+Criar prompt de sistema específico.
+
+A MOLLY deve ser:
+
+* paciente;
+* educada;
+* simples;
+* gentil;
+* objetiva;
+* acolhedora;
+* nunca infantilizar o idoso;
+* nunca usar linguagem técnica;
+* evitar frases longas.
+
+Exemplo:
+
+Ruim:
+
+> "O serviço de geolocalização não está disponível."
+
+Bom:
+
+> "Não consegui ver sua localização agora. Quer tentar novamente?"
+
+---
+
+# TAREFA 12 — RESPOSTAS CURTAS
+
+Para usuários idosos:
+
+priorizar respostas entre 1 e 3 frases.
+
+Evitar:
+
+* parágrafos longos;
+* listas extensas faladas;
+* excesso de informação.
+
+Exemplo:
+
+> "Você tem dois compromissos hoje. Um às dez da manhã e outro às três da tarde."
+
+---
+
+# TAREFA 13 — BRIEFING MATINAL INTELIGENTE
+
+Evoluir o briefing atual.
+
+A MOLLY deve poder dizer:
+
+```text
+Bom dia.
+
+Você tem dois lembretes hoje.
+
+Seu remédio é às 8 horas.
+
+Sua consulta é às 14 horas.
+
+Quer que eu leia tudo?
+```
+
+Contexto opcional futuro:
+
+* previsão do tempo;
+* aniversários;
+* mensagens familiares;
+* compromissos.
+
+---
+
+# TAREFA 14 — COMANDOS NATURAIS
+
+A MOLLY deve compreender frases variadas.
+
+Exemplo:
+
+```text
+"Me lembra do remédio às oito."
+
+"Coloca um lembrete para oito horas."
+
+"Às oito eu preciso tomar meu remédio."
+
+"Não deixa eu esquecer o remédio às oito."
+```
+
+Todas devem gerar a mesma intenção:
+
+```text
+createReminder
+```
+
+---
+
+# TAREFA 15 — MODO COMPANHIA
+
+Criar modo opcional:
+
+`Molly Companion`
+
+Possíveis interações:
+
+```text
+"Molly, converse comigo."
+
+"Molly, estou sozinho."
+
+"Molly, conte uma história."
+
+"Molly, me fale alguma coisa boa."
+
+"Molly, quero falar com minha filha."
+```
+
+Não transformar a MOLLY em substituta de acompanhamento médico ou psicológico.
+
+Em situações sensíveis, sugerir contato humano.
+
+---
+
+# TAREFA 16 — WAKE WORD "MOLLY"
+
+Preparar arquitetura para ativação por voz:
+
+```text
+"Molly"
+```
+
+Pesquisar integração com:
+
+Picovoice Porcupine Flutter SDK.
+
+Criar abstração:
+
+`WakeWordService`
+
+Não integrar imediatamente no núcleo se houver impacto significativo de bateria.
+
+Implementar primeiro como feature flag:
+
+```text
+wakeWordEnabled
+```
+
+---
+
+# TAREFA 17 — MODO OFFLINE
+
+Criar camada para comandos críticos offline.
+
+Exemplos:
+
+```text
+"Molly, socorro."
+
+"Molly, ligar para Ana."
+
+"Molly, meus lembretes."
+
+"Molly, que horas são?"
+
+"Molly, confirmar remédio."
+```
+
+Esses comandos não devem depender de LLM.
+
+Criar:
+
+`OfflineIntentService`
+
+Fluxo:
+
+```text
+entrada
+ ↓
+detecção local
+ ↓
+intenção reconhecida?
+ ↓
+SIM → executar localmente
+NÃO → enviar para IA
+```
+
+---
+
+# TAREFA 18 — SOS POR VOZ
+
+Adicionar reconhecimento explícito de frases:
+
+```text
+socorro
+me ajuda
+chama minha filha
+chama alguém
+estou passando mal
+preciso de ajuda
+```
+
+Se detectado possível SOS:
+
+apresentar:
+
+```text
+Parece que você precisa de ajuda.
+
+Vou acionar seu contato de emergência.
+
+Cancelar
+```
+
+Adicionar contagem curta configurável antes do disparo.
+
+SOS continuará usando o pipeline existente.
+
+Não permitir que LLM seja responsável pelo disparo técnico.
+
+---
+
+# TAREFA 19 — PREVENÇÃO DE FALSOS POSITIVOS
+
+Para ações sensíveis, validar contexto.
+
+Exemplo:
+
+Usuário:
+
+> "Ontem eu falei que estava passando mal."
+
+Não disparar SOS.
+
+Apenas frases atuais e contextualizadas devem ser consideradas emergência.
+
+---
+
+# TAREFA 20 — INTEGRAÇÃO COM FAMÍLIA
+
+Criar comandos:
+
+```text
+"Molly, avisa a Ana que estou bem."
+
+"Molly, manda mensagem para meu filho."
+
+"Molly, liga para minha filha."
+
+"Molly, quem está acompanhando meus lembretes?"
+```
+
+Utilizar serviços existentes de família e chat.
+
+---
+
+# TAREFA 21 — MEDICAMENTOS
+
+Criar camada específica para lembretes de medicamento.
+
+A MOLLY não deve:
+
+* indicar dose;
+* recomendar medicamento;
+* alterar prescrição;
+* oferecer diagnóstico.
+
+Pode:
+
+* lembrar horários;
+* confirmar uso;
+* mostrar histórico;
+* avisar familiar autorizado.
+
+---
+
+# TAREFA 22 — PROMPT SAFETY
+
+Adicionar regras rígidas.
+
+A MOLLY nunca pode:
+
+* diagnosticar doenças;
+* alterar medicação;
+* substituir médico;
+* afirmar que uma pessoa está segura;
+* garantir que emergência foi resolvida.
+
+Quando houver sinais de emergência:
+
+orientar busca de ajuda e utilizar recursos SOS do aplicativo.
+
+---
+
+# TAREFA 23 — PROATIVIDADE
+
+Criar `MollyProactiveService`.
+
+Exemplo:
+
+remédio atrasado.
+
+Após 15 minutos:
+
+> "Você conseguiu tomar seu remédio?"
+
+Depois:
+
+> "Quer que eu lembre novamente?"
+
+Não enviar notificações excessivas.
+
+Adicionar preferências.
+
+---
+
+# TAREFA 24 — CONFIGURAÇÕES DA MOLLY
+
+Criar tela:
+
+`molly_settings_screen.dart`
+
+Opções:
+
+```text
+MOLLY ATIVA
+
+Resposta por voz
+SIM / NÃO
+
+Velocidade da voz
+Lenta / Normal
+
+Memória
+SIM / NÃO
+
+Modo companhia
+SIM / NÃO
+
+Sugestões inteligentes
+SIM / NÃO
+
+Wake word "Molly"
+SIM / NÃO
+
+Briefing diário
+SIM / NÃO
+```
+
+---
+
+# TAREFA 25 — FAILSAFE DA IA
+
+Se o serviço de IA estiver indisponível:
+
+mostrar:
+
+> "Estou com dificuldade para responder agora, mas seus lembretes e o botão SOS continuam funcionando."
+
+Funções locais devem continuar disponíveis.
+
+---
+
+# TAREFA 26 — CACHE
+
+Adicionar cache para:
+
+* perfil;
+* familiares;
+* lembretes do dia;
+* configurações;
+* contexto mínimo.
+
+Permitir algumas funções sem internet.
+
+---
+
+# TAREFA 27 — TELEMETRIA
+
+Criar eventos sem conteúdo sensível.
+
+Exemplos:
+
+```text
+molly_started
+molly_voice_used
+molly_tool_executed
+molly_error
+molly_offline_command
+```
+
+Nunca registrar conversa completa por padrão.
+
+---
+
+# TAREFA 28 — TESTES UNITÁRIOS
+
+Criar testes para:
+
+* classificação de intenção;
+* tool calling;
+* validação de parâmetros;
+* memória;
+* contexto;
+* comandos offline;
+* classificação de risco.
+
+---
+
+# TAREFA 29 — TESTES DE SEGURANÇA
+
+Testar cenários:
+
+```text
+"Molly, exclua todos os meus lembretes."
+
+"Molly, liga para qualquer pessoa."
+
+"Molly, estou passando mal."
+
+"Molly, ontem eu estava passando mal."
+
+"Molly, tomei dois comprimidos."
+
+"Molly, qual medicamento eu deveria tomar?"
+```
+
+Validar comportamento seguro.
+
+---
+
+# TAREFA 30 — TESTES COM IDOSOS
+
+Criar checklist de UX.
+
+Verificar:
+
+* tamanho de fonte;
+* contraste;
+* tamanho de botão;
+* velocidade da voz;
+* número de passos;
+* clareza;
+* feedback visual;
+* feedback sonoro.
+
+Criar:
+
+`docs/MOLLY_ACCESSIBILITY_CHECKLIST.md`
+
+---
+
+# TAREFA 31 — OTIMIZAÇÃO DE CUSTOS
+
+Evitar chamada de IA para tudo.
+
+Antes do modelo:
+
+```text
+OfflineIntentService
+       ↓
+Intent local reconhecida?
+       ↓
+SIM → executar local
+       ↓
+NÃO → LLM
+```
+
+Também implementar:
+
+* cache;
+* prompts curtos;
+* contexto limitado;
+* histórico resumido;
+* modelo econômico para tarefas simples.
+
+---
+
+# TAREFA 32 — ABSTRAÇÃO DE PROVEDOR DE IA
+
+Não prender o aplicativo a um único fornecedor.
+
+Criar:
+
+```text
+abstract class AiProvider
+```
+
+Métodos:
+
+```text
+sendMessage()
+streamResponse()
+executeTool()
+```
+
+Implementações futuras:
+
+```text
+OpenAiProvider
+GeminiProvider
+ClaudeProvider
+LocalProvider
+```
+
+---
+
+# TAREFA 33 — INTEGRAÇÃO LIVEKIT
+
+Criar uma branch experimental:
+
+```text
+feature/molly-livekit
+```
+
+Testar:
+
+LiveKit Agents + Flutter Agent Starter.
+
+Objetivo:
+
+* baixa latência;
+* streaming;
+* interrupção de fala;
+* conversa natural;
+* voz bidirecional.
+
+Comparar com STT/TTS atual.
+
+Não substituir o sistema atual até validar estabilidade.
+
+---
+
+# TAREFA 34 — DOCUMENTAÇÃO
+
+Criar:
+
+```text
+docs/MOLLY_ARCHITECTURE.md
+docs/MOLLY_TOOLS.md
+docs/MOLLY_MEMORY.md
+docs/MOLLY_SAFETY.md
+docs/MOLLY_TESTING.md
+```
+
+Documentar tudo.
+
+---
+
+# TAREFA 35 — FEATURE FLAGS
+
+Adicionar:
+
+```text
+mollyEnabled
+mollyMemoryEnabled
+mollyWakeWordEnabled
+mollyRealtimeVoiceEnabled
+mollyProactiveEnabled
+```
+
+Isso deve permitir ativar funções gradualmente.
+
+---
+
+# TAREFA 36 — PLANO DE IMPLANTAÇÃO
+
+Implantar em fases.
+
+## FASE 1
+
+MOLLY textual.
+
+Funções:
+
+```text
+consultar lembretes
+criar lembretes
+consultar perfil
+```
+
+---
+
+## FASE 2
+
+Voz.
+
+```text
+STT
+TTS
+conversa
+```
+
+---
+
+## FASE 3
+
+Tool calling.
+
+```text
+família
+chat
+localização
+lembretes
+```
+
+---
+
+## FASE 4
+
+Memória.
+
+```text
+curto prazo
+longo prazo
+preferências
+```
+
+---
+
+## FASE 5
+
+Modo offline.
+
+---
+
+## FASE 6
+
+Wake word.
+
+---
+
+## FASE 7
+
+LiveKit / voz realtime.
+
+---
+
+## FASE 8
+
+Proatividade.
+
+---
+
+# TAREFA 37 — CRITÉRIO DE ACEITAÇÃO
+
+A primeira versão será considerada funcional quando o usuário conseguir dizer:
+
+> "Molly, bom dia."
+
+A MOLLY responder.
+
+Depois:
+
+> "O que eu tenho hoje?"
+
+A MOLLY consultar os lembretes.
+
+Depois:
+
+> "Me lembra de ligar para Ana às quatro."
+
+A MOLLY criar o lembrete.
+
+Depois:
+
+> "Quem é meu contato de emergência?"
+
+A MOLLY consultar o perfil.
+
+E:
+
+> "Molly, socorro."
+
+O aplicativo utilizar o sistema SOS existente sem depender da IA.
+
+---
+
+# RESULTADO ESPERADO
+
+Ao término, o Me Lembra Aí deve evoluir de:
+
+```text
+Aplicativo de lembretes
+```
+
+para:
+
+```text
+Assistente pessoal e familiar inteligente
+```
+
+com a MOLLY funcionando como interface principal entre o usuário e o aplicativo.
+
+A MOLLY deve:
+
+```text
+OUVIR
+   ↓
+ENTENDER
+   ↓
+LEMBRAR
+   ↓
+AGIR
+   ↓
+RESPONDER
+```
+
+mantendo sempre:
+
+```text
+SIMPLICIDADE
+SEGURANÇA
+PRIVACIDADE
+ACESSIBILIDADE
+CONFIABILIDADE
+```
+
+---
+
+# REGRA FINAL PARA O AGENTE DE DESENVOLVIMENTO
+
+Execute uma tarefa por vez.
+
+Após cada tarefa:
+
+1. implementar;
+2. analisar impacto;
+3. executar testes;
+4. corrigir erros;
+5. verificar regressões;
+6. atualizar documentação;
+7. registrar no DEVLOG;
+8. somente então iniciar a próxima tarefa.
+
+Não faça grandes refatorações fora do escopo.
+
+Não altere serviços críticos de SOS sem testes específicos.
+
+Sempre priorize o funcionamento do aplicativo atual sobre qualquer nova funcionalidade da MOLLY.

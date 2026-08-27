@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
+import '../features/molly/services/molly_briefing_service.dart';
 import 'profile_service.dart';
 import 'voice_service.dart';
 
@@ -183,15 +184,27 @@ class NotificationService {
   /// Quando o usuário toca na notificação, anuncia por voz se o perfil for Idoso.
   static Future<void> _onNotificationTap(NotificationResponse response) async {
     final perfil = await ProfileService.getProfile();
-    if (perfil == 'Vovô / Vovó') {
-      final payload = response.payload ?? '';
-      final callout = payload.trim().isNotEmpty
-          ? (payload[0].toUpperCase() + payload.substring(1))
-              .replaceAll(RegExp(r'[.!?]$'), '') +
-              '!'
-          : 'Você tem um lembrete!';
-      await VoiceService.speakAlert(callout);
+    if (perfil != 'Vovô / Vovó') return;
+
+    final payload = response.payload ?? '';
+
+    // TAREFA 13 do prompt mestre (briefing matinal): antes disso, tocar
+    // na notificação das 8h fazia o app falar o payload cru capitalizado
+    // — literalmente "Matinal!", já que o payload da notificação matinal
+    // é a string fixa 'matinal', não um texto pensado pra ser falado.
+    // Agora fala o briefing de verdade, com os lembretes reais do dia.
+    if (payload == 'matinal') {
+      final briefing = await MollyBriefingService.gerar();
+      await VoiceService.speakAlert(briefing);
+      return;
     }
+
+    final callout = payload.trim().isNotEmpty
+        ? (payload[0].toUpperCase() + payload.substring(1))
+            .replaceAll(RegExp(r'[.!?]$'), '') +
+            '!'
+        : 'Você tem um lembrete!';
+    await VoiceService.speakAlert(callout);
   }
 
   /// Agenda um Timer no app para falar o lembrete em voz alta no horário exato.

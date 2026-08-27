@@ -16,6 +16,8 @@ import 'features/child/child_screen.dart';
 import 'features/elderly/elderly_screen.dart';
 import 'features/family/family_screen.dart';
 import 'features/maps/map_screen.dart';
+import 'features/molly/screens/molly_memory_screen.dart';
+import 'features/molly/screens/molly_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'config_screen.dart';
 import 'history_screen.dart';
@@ -138,6 +140,11 @@ class MeLembraApp extends StatelessWidget {
         '/history': (context) => const HistoryScreen(),
         '/vehicles': (context) => const VehicleScreen(),
         '/map': (context) => const MapScreen(),
+        // Aditiva (TAREFA 6 do prompt mestre da MOLLY) — nenhum botão
+        // existente navega pra cá ainda; ver docstring de MollyScreen.
+        '/molly': (context) => const MollyScreen(),
+        // Idem (TAREFA 9) — ver docstring de MollyMemoryScreen.
+        '/molly-memory': (context) => const MollyMemoryScreen(),
         '/config': (context) => Scaffold(
               appBar: AppBar(
                 title: const Text('Configurações'),
