@@ -86,7 +86,7 @@ class _AboutScreenState extends State<AboutScreen> {
           _manualTile(
             icon: Icons.elderly,
             color: _primary,
-            titulo: 'Perfil Vovô / Vovó',
+            titulo: 'Perfil Melhor Idade',
             itens: [
               'Botão SOS: pressione para acionar emergência. Um contador de 5 segundos permite cancelar se acionado por engano.',
               '5 toques rápidos em qualquer lugar da tela também disparam o SOS.',

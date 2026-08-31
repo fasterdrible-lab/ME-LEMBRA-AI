@@ -101,7 +101,8 @@ Responda SEMPRE em JSON puro (sem texto fora do JSON), seguindo exatamente este 
   "data_hora": "ISO 8601 completo, ex: 2026-07-03T08:00:00, só para criar_lembrete",
   "recorrencia": "unico" | "diario" | "semanal",
   "itens": ["string", "..."],
-  "fala": "resposta curta e natural em português para falar de volta ao usuário"
+  "fala": "resposta curta e natural em português para falar de volta ao usuário",
+  "memoria": {"tipo": "string curta, ex: nome_preferido, horario_rotina, preferencia", "valor": "string", "confianca": 0.0 a 1.0}
 }
 
 Regras:
@@ -116,6 +117,7 @@ Regras:
 - Omita campos que não se aplicam à ação escolhida (não precisa incluir com valor vazio).
 - Nunca invente que disparou um SOS ou uma ligação de emergência — isso não é controlado por você.
 - Nunca invente lembretes, alertas, itens de lista ou qualquer outro dado que não esteja explicitamente no contexto fornecido ou na frase do usuário. Na dúvida, pergunte ou diga que não sabe — não adivinhe.
+- "memoria" (campo OPCIONAL, independente de "acao" — pode vir junto de qualquer ação): inclua SOMENTE quando o usuário compartilhar uma preferência pessoal durável, não algo pontual/de uma vez só. Bons exemplos: "pode me chamar de Seu Antônio" (nome_preferido), "eu sempre almoço ao meio-dia" (horario_rotina), "eu prefiro tomar remédio de manhã" (preferencia). NÃO inclua "memoria" para: comandos de ação (criar lembrete, ouvir lembretes, etc.), perguntas, comentários pontuais de um momento só, ou qualquer coisa da qual você não tenha certeza — nesse caso, omita o campo inteiro. Você nunca decide sozinha se isso é salvo: é só uma sugestão, o app sempre pergunta ao usuário antes de guardar qualquer coisa.
 """
 
 
@@ -128,6 +130,11 @@ class ComandoAction:
     recorrencia: str | None = None
     itens: list[str] = field(default_factory=list)
     fala: str = ""
+    # Proposta opcional de memória de longo prazo (sessão 24) — sempre os
+    # três campos juntos, ou nenhum. Nunca gravado aqui: só passa adiante
+    # pro app decidir se pergunta ao usuário (ver MollyAgentService.processar
+    # no cliente, que ainda confere o interruptor geral antes de perguntar).
+    memoria: dict[str, Any] | None = None
 
     @staticmethod
     def from_raw(raw: dict[str, Any]) -> "ComandoAction":
@@ -150,6 +157,22 @@ class ComandoAction:
         if not fala and acao in ("responder", "perguntar"):
             fala = "Pode repetir, por favor?"
 
+        memoria_raw = raw.get("memoria")
+        memoria = None
+        if isinstance(memoria_raw, dict):
+            m_tipo = str(memoria_raw.get("tipo") or "").strip()
+            m_valor = str(memoria_raw.get("valor") or "").strip()
+            if m_tipo and m_valor:
+                try:
+                    m_confianca = float(memoria_raw.get("confianca", 0.7))
+                except (TypeError, ValueError):
+                    m_confianca = 0.7
+                memoria = {
+                    "tipo": m_tipo,
+                    "valor": m_valor,
+                    "confianca": max(0.0, min(1.0, m_confianca)),
+                }
+
         return ComandoAction(
             acao=acao,
             titulo=(str(raw["titulo"]).strip() if raw.get("titulo") else None),
@@ -158,10 +181,11 @@ class ComandoAction:
             recorrencia=recorrencia,
             itens=itens,
             fala=fala,
+            memoria=memoria,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "acao": self.acao,
             "titulo": self.titulo,
             "tipo": self.tipo,
@@ -170,6 +194,9 @@ class ComandoAction:
             "itens": self.itens,
             "fala": self.fala,
         }
+        if self.memoria is not None:
+            d["memoria"] = self.memoria
+        return d
 
 
 def init_firebase() -> None:

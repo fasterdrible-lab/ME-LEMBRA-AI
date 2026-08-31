@@ -6,7 +6,7 @@ import '../../models/reminder.dart';
 import '../../services/reminder_service.dart';
 import '../../services/voice_service.dart';
 
-/// Tela de lembretes completa para o perfil Vovô / Vovó.
+/// Tela de lembretes completa para o perfil Melhor Idade.
 /// Seções fixas por categoria: Remédios · Água · Consultas · Mercado · Aniversários · Eventos.
 /// Inspirado em: Microsoft To Do (check animado), Todoist (badge count),
 /// Google Tasks (swipe delete), WaterMinder (contador de copos), AnyList (desmarcar todos).

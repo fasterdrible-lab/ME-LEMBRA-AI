@@ -117,7 +117,7 @@ class NotificationService {
   static Future<AndroidNotificationDetails> _androidDetailsForProfile() async {
     final perfil = await ProfileService.getProfile();
     switch (perfil) {
-      case 'Vovô / Vovó':
+      case 'Melhor Idade':
         return const AndroidNotificationDetails(
           'me_lembra_ai_idoso',
           'Lembretes (Idoso)',
@@ -184,7 +184,7 @@ class NotificationService {
   /// Quando o usuário toca na notificação, anuncia por voz se o perfil for Idoso.
   static Future<void> _onNotificationTap(NotificationResponse response) async {
     final perfil = await ProfileService.getProfile();
-    if (perfil != 'Vovô / Vovó') return;
+    if (perfil != 'Melhor Idade') return;
 
     final payload = response.payload ?? '';
 
@@ -217,7 +217,7 @@ class NotificationService {
       _voiceTimers.remove(id);
       // Só fala se o perfil ativo for Idoso (acessibilidade).
       final perfil = await ProfileService.getProfile();
-      if (perfil == 'Vovô / Vovó') {
+      if (perfil == 'Melhor Idade') {
         await VoiceService.speakAlert(callout);
       }
     });

@@ -4,6 +4,7 @@ import '../../../models/reminder.dart';
 import '../../../services/ai_command_service.dart';
 import '../../../services/profile_service.dart';
 import '../../../services/reminder_service.dart';
+import '../../../services/settings_service.dart';
 import '../../../services/sos_feed_service.dart';
 import '../memory/short_term_memory.dart';
 import '../models/molly_tool_result.dart';
@@ -30,6 +31,16 @@ import 'offline_intent_service.dart';
 /// não as lista no catálogo inicial de ferramentas, então formalizá-las
 /// como `MollyToolDefinition` fica para quando isso for pedido
 /// explicitamente, para não inflar o escopo desta tarefa.
+///
+/// **Gatilho de memória de longo prazo (sessão 24):** a IA pode sugerir,
+/// junto de qualquer ação, uma preferência durável do usuário pra lembrar
+/// (`ComandoAction.memoriaTipo`/`memoriaValor`). [processar] só repassa
+/// essa sugestão adiante (via `MollyToolResult.comPropostaDeMemoria`) se
+/// `SettingsService.getMollyMemoriaAutorizada()` estiver ligado — do
+/// contrário descarta em silêncio, sem nunca perguntar nada. Mesmo com o
+/// interruptor ligado, isto aqui NUNCA grava sozinho: quem chama precisa
+/// perguntar em voz alta e ouvir um "sim" antes de chamar
+/// `LongTermMemoryService.salvar()` (dupla trava da TAREFA 8/9).
 ///
 /// Importante: esta classe **porta**, mas não substitui ainda, a lógica
 /// hoje embutida em `elderly_screen.dart`. Trocar aquele código por
@@ -88,6 +99,23 @@ class MollyAgentService {
 
     final resultado = await _executar(acao, memoria: memoria);
     memoria?.registrarTroca(textoLimpo, resultado.fala);
+
+    // Proposta de memória de longo prazo (sessão 24): campo independente
+    // de "acao" — a IA pode sugerir junto de qualquer outra resposta.
+    // Checado aqui, e só aqui, se o interruptor geral "A Molly pode
+    // lembrar minhas preferências?" está ligado — se não estiver, a
+    // proposta é descartada em silêncio, sem nunca chegar a perguntar
+    // nada ao usuário (mesmo espírito de `LongTermMemoryService.salvar`,
+    // que também confere esse mesmo interruptor antes de gravar).
+    if (acao.memoriaTipo != null &&
+        acao.memoriaValor != null &&
+        await SettingsService.getMollyMemoriaAutorizada()) {
+      return resultado.comPropostaDeMemoria(
+        tipo: acao.memoriaTipo!,
+        valor: acao.memoriaValor!,
+        confianca: acao.memoriaConfianca ?? 0.7,
+      );
+    }
     return resultado;
   }
 

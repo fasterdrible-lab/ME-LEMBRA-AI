@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:me_lembra_ai/features/molly/services/offline_intent_service.dart';
 
-/// Testes das TAREFAs 17 (modo offline) e 18 (SOS por voz).
+/// Testes das TAREFAs 17 (modo offline), 18 (SOS por voz) e 19 (prevenção
+/// de falsos positivos nas frases suaves de emergência da TAREFA 18).
 /// `classificar()` é puro — sem Firebase, sem IA, sem rede — e é onde
 /// mora o que essas tarefas realmente pedem (detecção local). `tentar()`
 /// só é testado nos casos que não tocam Firestore ("que horas são" e
@@ -86,6 +87,39 @@ void main() {
 
     test('SOCORRO tem prioridade sobre as frases mais suaves quando aparecem juntas', () {
       expect(OfflineIntentService.classificar('preciso de ajuda, SOCORRO'), OfflineIntent.socorro);
+    });
+
+    test('TAREFA 19: nao confunde uma frase suave embutida dentro de outra palavra', () {
+      // "ajudaram" contém "ajuda" como prefixo, mas não é a mesma palavra.
+      expect(
+        OfflineIntentService.classificar('ontem eles me ajudaram muito com a mudança'),
+        isNot(OfflineIntent.possivelEmergencia),
+      );
+    });
+
+    test('TAREFA 19: uma negacao logo antes da frase suave nao dispara a emergencia', () {
+      expect(
+        OfflineIntentService.classificar('não preciso de ajuda, já resolvi sozinho'),
+        isNot(OfflineIntent.possivelEmergencia),
+      );
+      expect(
+        OfflineIntentService.classificar('nunca preciso de ajuda pra essas coisas'),
+        isNot(OfflineIntent.possivelEmergencia),
+      );
+    });
+
+    test('TAREFA 19: relato de algo do passado ja resolvido nao dispara a emergencia', () {
+      expect(
+        OfflineIntentService.classificar('ontem eu disse que preciso de ajuda, mas já passou'),
+        isNot(OfflineIntent.possivelEmergencia),
+      );
+    });
+
+    test('TAREFA 19: a frase suave real continua reconhecida sem negacao/passado por perto', () {
+      expect(
+        OfflineIntentService.classificar('mãe, eu realmente preciso de ajuda agora'),
+        OfflineIntent.possivelEmergencia,
+      );
     });
   });
 

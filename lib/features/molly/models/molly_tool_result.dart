@@ -40,6 +40,18 @@ class MollyToolResult {
   /// cancelamento, chamando `SosService.trigger()` como sempre.
   final bool precisaConfirmacaoDeEmergencia;
 
+  /// `true` quando a IA sugeriu uma preferência durável do usuário pra
+  /// guardar na memória de longo prazo (ex.: "pode me chamar de Seu
+  /// Antônio", "eu sempre almoço ao meio-dia") — `dados['memoriaProposta']`
+  /// guarda `{tipo, valor, confianca}`. Nunca é a IA quem decide salvar:
+  /// isso só chega aqui já filtrado pelo interruptor geral
+  /// (`SettingsService.getMollyMemoriaAutorizada`, ver
+  /// `MollyAgentService.processar`), e mesmo assim quem chama
+  /// (`molly_assistant_panel.dart`) precisa perguntar em voz alta e ouvir
+  /// um "sim" antes de chamar `LongTermMemoryService.salvar()` — a mesma
+  /// regra de dupla trava da TAREFA 8/9 do prompt mestre.
+  final bool precisaConfirmacaoDeMemoria;
+
   /// `true` quando a IA não respondeu (offline, backend fora do ar, erro).
   /// Quem chama deve tentar o parser local existente antes de desistir —
   /// mesmo comportamento de hoje em `_processarComando` — e só usar `fala`
@@ -70,11 +82,36 @@ class MollyToolResult {
     this.precisaEsclarecimento = false,
     this.precisaConfirmacao = false,
     this.precisaConfirmacaoDeEmergencia = false,
+    this.precisaConfirmacaoDeMemoria = false,
     this.iaIndisponivel = false,
     this.acao = 'responder',
     this.falasEmSequencia = const [],
     this.dados,
   });
+
+  /// Anexa uma proposta de memória de longo prazo a este resultado já
+  /// pronto — preserva tudo o mais (fala, sucesso, outras flags de
+  /// confirmação) e só liga [precisaConfirmacaoDeMemoria]. Usado por
+  /// `MollyAgentService.processar` depois de executar a ação normal: a
+  /// proposta da IA é um "acréscimo" sobre qualquer resultado, não um tipo
+  /// de resultado à parte.
+  MollyToolResult comPropostaDeMemoria({
+    required String tipo,
+    required String valor,
+    required double confianca,
+  }) =>
+      MollyToolResult(
+        sucesso: sucesso,
+        fala: fala,
+        precisaEsclarecimento: precisaEsclarecimento,
+        precisaConfirmacao: precisaConfirmacao,
+        precisaConfirmacaoDeEmergencia: precisaConfirmacaoDeEmergencia,
+        precisaConfirmacaoDeMemoria: true,
+        iaIndisponivel: iaIndisponivel,
+        acao: acao,
+        falasEmSequencia: falasEmSequencia,
+        dados: {...?dados, 'memoriaProposta': {'tipo': tipo, 'valor': valor, 'confianca': confianca}},
+      );
 
   factory MollyToolResult.sucesso(
     String fala, {

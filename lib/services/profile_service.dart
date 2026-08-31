@@ -22,6 +22,20 @@ class ProfileService {
     }
   }
 
+  /// Sessão 24: o perfil antes rotulado "Vovô / Vovó" passou a se chamar
+  /// "Melhor Idade" em toda a interface. Contas que já tinham o valor
+  /// antigo salvo (Firestore ou SharedPreferences) continuam funcionando
+  /// sem precisar escolher o perfil de novo — mesmo espírito da migração
+  /// transparente já usada para o campo legado `cfg_sos_numero`
+  /// (`settings_service.dart`). O valor armazenado só passa a ser gravado
+  /// como "Melhor Idade" na próxima escrita (`saveProfile`); esta função
+  /// só normaliza o que é lido.
+  static const _perfilIdosoAntigo = 'Vovô / Vovó';
+  static const _perfilIdosoAtual = 'Melhor Idade';
+
+  static String _normalizarPerfil(String perfil) =>
+      perfil == _perfilIdosoAntigo ? _perfilIdosoAtual : perfil;
+
   static Future<String?> getProfile() async {
     final doc = _userDoc;
     if (doc != null) {
@@ -29,14 +43,15 @@ class ProfileService {
         final snapshot = await doc.get();
         final data = snapshot.data();
         if (data != null && data['perfil'] is String) {
-          return data['perfil'] as String;
+          return _normalizarPerfil(data['perfil'] as String);
         }
       } catch (_) {
         // Firestore indisponível — usa SharedPreferences como fallback
       }
     }
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyPerfil);
+    final salvo = prefs.getString(_keyPerfil);
+    return salvo == null ? null : _normalizarPerfil(salvo);
   }
 
   // Chave derivada do perfil, ex: "nome_Adulto"
@@ -58,8 +73,14 @@ class ProfileService {
       try {
         final snapshot = await doc.get();
         final data = snapshot.data();
-        // Retorna o nome do Firestore somente se o perfil armazenado corresponde ao solicitado
-        if (data != null && data['perfil'] == perfil && data['nome'] is String) {
+        // Retorna o nome do Firestore somente se o perfil armazenado corresponde
+        // ao solicitado — normaliza o valor armazenado antes de comparar, pra uma
+        // conta legada ("Vovô / Vovó" no Firestore) continuar achando o nome já
+        // salvo quando consultada com o rótulo atual ("Melhor Idade").
+        if (data != null &&
+            data['perfil'] is String &&
+            _normalizarPerfil(data['perfil'] as String) == perfil &&
+            data['nome'] is String) {
           return data['nome'] as String;
         }
       } catch (_) {

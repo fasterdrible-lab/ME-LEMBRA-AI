@@ -7,7 +7,7 @@
 1. [O que é o Me Lembra Aí?](#1-o-que-é-o-me-lembra-aí)
 2. [Instalação](#2-instalação)
 3. [Primeiro acesso — Escolha do perfil](#3-primeiro-acesso--escolha-do-perfil)
-4. [Modo Idoso (Vovô / Vovó)](#4-modo-idoso-vovô--vovó)
+4. [Modo Idoso (Melhor Idade)](#4-modo-idoso-melhor-idade)
 5. [Modo Adulto](#5-modo-adulto)
 6. [Modo Criança](#6-modo-criança)
 7. [Criando lembretes](#7-criando-lembretes)
@@ -52,7 +52,7 @@ Na primeira abertura, o app exibe três perfis:
 
 | Perfil | Para quem é |
 |--------|-------------|
-| **Vovô / Vovó** | Idosos que preferem interface simples e comandos de voz |
+| **Melhor Idade** | Idosos que preferem interface simples e comandos de voz |
 | **Adulto** | Usuários que querem controle completo dos lembretes |
 | **Criança** | Crianças acompanhadas por um responsável |
 
@@ -60,7 +60,7 @@ Toque no cartão do seu perfil. Esta escolha fica salva; você pode alterá-la e
 
 ---
 
-## 4. Modo Idoso (Vovô / Vovó)
+## 4. Modo Idoso (Melhor Idade)
 
 A tela principal do Modo Idoso foi desenhada para ser usada sem dificuldade.
 
@@ -178,7 +178,7 @@ Todo dia às **8:00 da manhã**, o aplicativo envia uma notificação com a mens
 
 > *"Bom dia! ☀️ Confira seus lembretes de hoje no Me Lembra Aí."*
 
-Esta notificação aparece para o perfil **Vovô / Vovó** automaticamente, sem necessidade de configuração. Para ouvir a lista completa dos lembretes do dia, abra o app e toque em **Ouvir lembretes de hoje**.
+Esta notificação aparece para o perfil **Melhor Idade** automaticamente, sem necessidade de configuração. Para ouvir a lista completa dos lembretes do dia, abra o app e toque em **Ouvir lembretes de hoje**.
 
 ---
 

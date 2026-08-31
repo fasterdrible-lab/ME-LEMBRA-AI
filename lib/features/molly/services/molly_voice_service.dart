@@ -39,6 +39,7 @@ class MollyVoiceService {
 
   String _capturaAtual = '';
   bool _finalJaEntregue = false;
+  bool _descartado = false;
 
   /// Inicia um turno de escuta. Retorna `false` se o reconhecimento de voz
   /// não estiver disponível no aparelho (mesma checagem de
@@ -67,16 +68,19 @@ class MollyVoiceService {
 
     final disponivel = await _speech.initialize(
       onStatus: (status) {
+        if (_descartado) return;
         final aindaOuvindo = estado.value == MollyVoiceState.listening;
         if ((status == 'done' || status == 'notListening') && aindaOuvindo) {
           _finalizarTurno(aoReconhecerFinal);
         }
       },
       onError: (erro) {
+        if (_descartado) return;
         estado.value = MollyVoiceState.error;
         aoErro?.call(erro.errorMsg);
       },
     );
+    if (_descartado) return false;
 
     if (!disponivel) {
       estado.value = MollyVoiceState.error;
@@ -94,6 +98,7 @@ class MollyVoiceService {
       listenFor: const Duration(seconds: 25),
       pauseFor: const Duration(seconds: 6),
       onResult: (resultado) {
+        if (_descartado) return;
         _capturaAtual = resultado.recognizedWords;
         textoParcial.value = _capturaAtual;
         aoOuvirParcial?.call(_capturaAtual);
@@ -108,7 +113,7 @@ class MollyVoiceService {
   Future<void> _finalizarTurno(void Function(String) aoReconhecerFinal) async {
     if (_finalJaEntregue) return;
     _finalJaEntregue = true;
-    if (estado.value == MollyVoiceState.listening) {
+    if (!_descartado && estado.value == MollyVoiceState.listening) {
       estado.value = MollyVoiceState.idle;
     }
 
@@ -123,6 +128,7 @@ class MollyVoiceService {
     if (_capturaAtual.trim().isEmpty) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
+    if (_descartado) return;
     aoReconhecerFinal(_capturaAtual);
   }
 
@@ -131,7 +137,7 @@ class MollyVoiceService {
   /// agir sem esperar o resultado final).
   void pararEscuta() {
     _speech.stop();
-    if (estado.value == MollyVoiceState.listening) {
+    if (!_descartado && estado.value == MollyVoiceState.listening) {
       estado.value = MollyVoiceState.idle;
     }
   }
@@ -140,16 +146,17 @@ class MollyVoiceService {
   /// texto e ter uma fala pronta) — não mexe no motor de voz, só no
   /// estado exposto para a UI.
   void marcarPensando() {
+    if (_descartado) return;
     estado.value = MollyVoiceState.thinking;
   }
 
   /// Fala [texto] pelo TTS já existente (`VoiceService`), expondo o
   /// estado `speaking` enquanto isso acontece.
   Future<void> falar(String texto) async {
-    if (texto.trim().isEmpty) return;
+    if (texto.trim().isEmpty || _descartado) return;
     estado.value = MollyVoiceState.speaking;
     await VoiceService.speak(texto);
-    if (estado.value == MollyVoiceState.speaking) {
+    if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
   }
@@ -158,10 +165,10 @@ class MollyVoiceService {
   /// frase, como em `MollyToolResult.falasEmSequencia`).
   Future<void> falarSequencia(List<String> textos) async {
     final validos = textos.where((t) => t.trim().isNotEmpty);
-    if (validos.isEmpty) return;
+    if (validos.isEmpty || _descartado) return;
     estado.value = MollyVoiceState.speaking;
     await VoiceService.speakAll(validos);
-    if (estado.value == MollyVoiceState.speaking) {
+    if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
   }
@@ -175,14 +182,22 @@ class MollyVoiceService {
   /// clássico seria um comportamento novo, não validado em campo.
   void interromperFala() {
     VoiceService.stop();
-    if (estado.value == MollyVoiceState.speaking) {
+    if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
   }
 
   /// Libera os recursos do reconhecimento de voz. Chamar no `dispose()` de
   /// quem possui esta instância.
+  ///
+  /// Marca [_descartado] ANTES de liberar os `ValueNotifier`s: um `await`
+  /// em [falar]/[escutar] pode retomar depois que a tela que possui esta
+  /// instância já foi descartada (ex.: usuário saiu da tela no meio de uma
+  /// fala) — sem essa flag, o código retomado tentava escrever em
+  /// `estado.value` já descartado e derrubava a conversa com uma exceção
+  /// não tratada (achado em teste ao vivo no aparelho físico).
   void dispose() {
+    _descartado = true;
     _speech.stop();
     estado.dispose();
     textoParcial.dispose();

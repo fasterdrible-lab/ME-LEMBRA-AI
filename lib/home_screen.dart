@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     // Redireciona direto para a tela do perfil salvo ao reiniciar o app
-    if (perfil == 'Vovô / Vovó') {
+    if (perfil == 'Melhor Idade') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.pushReplacementNamed(context, '/elderly');
       });
@@ -167,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                if (_perfil == 'Vovô / Vovó')
+                if (_perfil == 'Melhor Idade')
                   Padding(
                     padding: const EdgeInsets.only(top: 18.0),
                     child: ElevatedButton.icon(

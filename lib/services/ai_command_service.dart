@@ -22,6 +22,16 @@ class ComandoAction {
   final List<String> itens;
   final String fala;
 
+  /// Campo opcional e independente de [acao] — a IA pode sugerir que uma
+  /// preferência durável do usuário (não algo pontual) vale a pena
+  /// lembrar (ex.: "pode me chamar de Seu Antônio"). Sempre `null`/`null`
+  /// juntos ou preenchidos juntos; [memoriaConfianca] vem em 0.0–1.0.
+  /// Nunca é gravado sozinho — ver `MollyToolResult.comPropostaDeMemoria`
+  /// e `LongTermMemoryService.salvar` (dupla trava de autorização).
+  final String? memoriaTipo;
+  final String? memoriaValor;
+  final double? memoriaConfianca;
+
   const ComandoAction({
     required this.acao,
     this.titulo,
@@ -30,10 +40,17 @@ class ComandoAction {
     this.recorrencia,
     this.itens = const [],
     this.fala = '',
+    this.memoriaTipo,
+    this.memoriaValor,
+    this.memoriaConfianca,
   });
 
   factory ComandoAction.fromJson(Map<String, dynamic> json) {
     final dataHoraStr = json['data_hora'] as String?;
+    final memoria = json['memoria'];
+    final memoriaTipo = memoria is Map ? memoria['tipo'] as String? : null;
+    final memoriaValor = memoria is Map ? memoria['valor'] as String? : null;
+    final memoriaConfiancaRaw = memoria is Map ? memoria['confianca'] : null;
     return ComandoAction(
       acao: json['acao'] as String? ?? 'responder',
       titulo: json['titulo'] as String?,
@@ -42,6 +59,12 @@ class ComandoAction {
       recorrencia: json['recorrencia'] as String?,
       itens: (json['itens'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       fala: json['fala'] as String? ?? '',
+      // Só considera a proposta válida se tipo E valor vierem preenchidos —
+      // metade da informação não é o bastante pra perguntar nada ao usuário.
+      memoriaTipo: (memoriaTipo != null && memoriaValor != null) ? memoriaTipo : null,
+      memoriaValor: (memoriaTipo != null && memoriaValor != null) ? memoriaValor : null,
+      memoriaConfianca:
+          (memoriaTipo != null && memoriaValor != null) ? (memoriaConfiancaRaw as num?)?.toDouble() : null,
     );
   }
 }

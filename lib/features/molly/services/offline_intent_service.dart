@@ -9,7 +9,7 @@ import 'molly_risk_policy.dart';
 /// prompt mestre) — um por exemplo dado na tarefa, na mesma ordem — mais
 /// [possivelEmergencia] (TAREFA 18: frases de emergência mais suaves que
 /// "SOCORRO", que pedem confirmação com contagem regressiva em vez de
-/// disparo imediato).
+/// disparo imediato — TAREFA 19 reduz falsos positivos nessa detecção).
 enum OfflineIntent {
   socorro,
   possivelEmergencia,
@@ -51,6 +51,13 @@ enum OfflineIntent {
 /// do botão SOS manual) antes de qualquer disparo — o LLM nunca decide
 /// isso sozinho, e o disparo técnico em si sempre passa por
 /// `SosService.trigger()`, nunca por esta classe diretamente nesse caso.
+///
+/// TAREFA 19 (prevenção de falsos positivos): a detecção das frases
+/// suaves acima passou a exigir palavra inteira (não embutida dentro de
+/// uma palavra maior, ex.: "me ajudaram" não deve casar com "me ajuda"),
+/// e a ignorar frases negadas ("não preciso de ajuda") ou que relatam
+/// algo do passado já resolvido ("ontem eu precisei de ajuda, mas já
+/// passou") — ver [_indiceDaFraseInteira]/[_precedidaDeNegacao] abaixo.
 ///
 /// Cada intenção reconhecida delega a um serviço/ferramenta já existente
 /// (`SosService`, `ReminderService`, `MollyRiskPolicy`) — esta classe só
@@ -114,7 +121,78 @@ class OfflineIntentService {
     'preciso de ajuda',
   ];
 
-  static bool _pareceEmergenciaSuave(String t) => _fasesEmergenciaSuave.any(t.contains);
+  /// Palavras que, logo antes da frase suave, invertem o sentido dela
+  /// ("não preciso de ajuda" não é um pedido de ajuda).
+  static const List<String> _negacoes = ['não', 'nao', 'nunca', 'nem'];
+
+  /// Marcadores de que a frase está relatando algo já resolvido, não
+  /// pedindo ajuda agora (TAREFA 19: ex. "ontem eu precisei de ajuda, mas
+  /// já passou" não deve disparar a confirmação de emergência).
+  static const List<String> _marcadoresPassado = [
+    'ontem',
+    'anteontem',
+    'semana passada',
+    'mês passado',
+    'mes passado',
+    'ano passado',
+    'há uns dias',
+    'ha uns dias',
+    'há tempos',
+    'ha tempos',
+    'no passado',
+  ];
+
+  /// TAREFA 19 (prevenção de falsos positivos): [_fasesEmergenciaSuave] só
+  /// dispara quando aparece como palavra inteira (não embutida dentro de
+  /// uma palavra maior — "me ajudaram" não deve casar com "me ajuda"),
+  /// sem uma negação logo antes ("não preciso de ajuda") e sem um
+  /// marcador de que o usuário está relatando algo do passado ("ontem...").
+  static bool _pareceEmergenciaSuave(String t) {
+    for (final frase in _fasesEmergenciaSuave) {
+      final idx = _indiceDaFraseInteira(t, frase);
+      if (idx == -1) continue;
+      if (_precedidaDeNegacao(t, idx)) continue;
+      if (_marcadoresPassado.any(t.contains)) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /// Acha [frase] em [texto] como palavra inteira — os caracteres logo
+  /// antes/depois da ocorrência não podem ser letras, senão a frase está
+  /// embutida dentro de uma palavra maior (ex.: "ajuda" dentro de
+  /// "ajudaram"). Devolve o índice da ocorrência, ou -1 se não achar
+  /// nenhuma que valha. Usa `\p{L}` (Unicode) em vez de `\b`/`\w` porque o
+  /// motor de regex do Dart trata letras acentuadas (ex.: "alguém") como
+  /// não-palavra por padrão, quebrando `\b` nelas.
+  static int _indiceDaFraseInteira(String texto, String frase) {
+    final letra = RegExp(r'\p{L}', unicode: true);
+    var inicio = 0;
+    while (true) {
+      final idx = texto.indexOf(frase, inicio);
+      if (idx == -1) return -1;
+      final antes = idx > 0 ? texto[idx - 1] : '';
+      final depoisIdx = idx + frase.length;
+      final depois = depoisIdx < texto.length ? texto[depoisIdx] : '';
+      final antesEhLetra = antes.isNotEmpty && letra.hasMatch(antes);
+      final depoisEhLetra = depois.isNotEmpty && letra.hasMatch(depois);
+      if (!antesEhLetra && !depoisEhLetra) return idx;
+      inicio = idx + 1;
+    }
+  }
+
+  /// Confere se uma das até três palavras logo antes de [indiceFrase] em
+  /// [texto] é uma negação — janela curta de propósito, pra não suprimir
+  /// um pedido de ajuda real só porque uma negação apareceu bem antes na
+  /// frase, sem relação com o pedido em si.
+  static bool _precedidaDeNegacao(String texto, int indiceFrase) {
+    final antes = texto.substring(0, indiceFrase).trim();
+    if (antes.isEmpty) return false;
+    final palavras = antes.split(RegExp(r'\s+'));
+    final ultimas = palavras.length > 3 ? palavras.sublist(palavras.length - 3) : palavras;
+    final limpas = ultimas.map((w) => w.replaceAll(RegExp(r'[^\p{L}]', unicode: true), ''));
+    return limpas.any(_negacoes.contains);
+  }
 
   static bool _ehQueHoras(String t) =>
       t.contains('que horas') || t.contains('que hora é') || t.contains('horas são');

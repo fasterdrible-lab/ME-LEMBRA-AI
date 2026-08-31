@@ -111,7 +111,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
     if (!mounted) return;
 
     final opcoes = [
-      {'label': 'Vovô / Vovó', 'icon': Icons.elderly, 'cor': const Color(0xFF7B5EA7), 'rota': '/elderly'},
+      {'label': 'Melhor Idade', 'icon': Icons.elderly, 'cor': const Color(0xFF7B5EA7), 'rota': '/elderly'},
       {'label': 'Adulto', 'icon': Icons.person, 'cor': const Color(0xFF42A5F5), 'rota': '/adult'},
       {'label': 'Filhos', 'icon': Icons.child_care, 'cor': const Color(0xFF66BB6A), 'rota': '/child'},
       {'label': 'Família', 'icon': Icons.family_restroom, 'cor': const Color(0xFFFFB300), 'rota': '/family'},
@@ -419,6 +419,19 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 onTap: () => Navigator.pushNamed(context, '/map'),
               ),
             ])),
+            const SizedBox(height: 16),
+            // TESTE TEMPORÁRIO (sessão 24): atalho pra validar a tela /molly
+            // no aparelho físico antes de decidir a migração real do botão
+            // "Falar Comando" (ver docs/MOLLY_ARCHITECTURE_ANALYSIS.md,
+            // seção 5). Remover quando a validação terminar.
+            _secao('MOLLY (PRÉVIA — TESTE)'),
+            _card(child: ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFFEDE7F6), child: Icon(Icons.auto_awesome, color: Color(0xFF7B5EA7))),
+              title: const Text('Abrir Molly (beta)', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Prévia da assistente nova — ainda não substitui o Falar Comando'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, '/molly'),
+            )),
             const SizedBox(height: 16),
             _secao('NOTIFICACOES'),
             _card(child: SwitchListTile(

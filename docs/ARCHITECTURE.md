@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-08-26 (sessão 23)
+> Última atualização: 2026-08-28 (sessão 24, continuação)
 
 ---
 
@@ -544,19 +544,39 @@ lib/
       child_screen.dart
       child_monitor_screen.dart
     elderly/
-      elderly_screen.dart            # tela principal do idoso (ainda com
-                                      # o "Falar Comando" original — ver
-                                      # features/molly/ abaixo)
+      elderly_screen.dart            # tela principal do idoso. Botão
+                                      # "Assistente Molly" (sessão 24, antes
+                                      # "Falar Comando") abre
+                                      # MollyAssistantPanel via bottom sheet
+                                      # — _falarComando (lógica antiga)
+                                      # continua no arquivo, sem uso, pra
+                                      # reverter fácil se precisar
       meus_lembretes_screen.dart
-    molly/                           # em construção (sessão 23) — ver
-                                      # docs/MOLLY_ARCHITECTURE_ANALYSIS.md
+    molly/                           # desde a sessão 23 — ver
+                                      # docs/MOLLY_ARCHITECTURE_ANALYSIS.md.
+                                      # Sessão 24: virou o assistente de
+                                      # produção (ver TASKS.md, MOLLY-20 a 24)
       screens/
-        molly_screen.dart            # tela principal (TAREFA 6) — rota
-                                      # /molly, aditiva, sem navegação
-                                      # apontando pra ela ainda
+        molly_screen.dart            # tela cheia, rota /molly — desde a
+                                      # sessão 24 é só uma casca (AppBar +
+                                      # SafeArea) em volta de
+                                      # widgets/molly_assistant_panel.dart
         molly_memory_screen.dart     # "O que a Molly lembra" (TAREFA 9) —
-                                      # rota /molly-memory, idem aditiva
+                                      # rota /molly-memory, aditiva
       widgets/
+        molly_assistant_panel.dart   # MollyAssistantPanel (sessão 24) —
+                                      # TODA a lógica de conversa/voz/risco/
+                                      # emergência/memória/proatividade,
+                                      # extraída de molly_screen.dart pra
+                                      # ser reaproveitada em 2 lugares sem
+                                      # duplicar nada: (1) tela cheia /molly
+                                      # (mostrarLembretesHoje: true, SOS
+                                      # fixo fora da área rolável); (2)
+                                      # showModalBottomSheet aberto direto
+                                      # de elderly_screen.dart
+                                      # (abrirComoAtalho — autoIniciar:
+                                      # true, já começa a ouvir sozinho,
+                                      # sem navegar de tela)
         listening_indicator.dart     # "Estou ouvindo"/"Pensando"/"Falando"
       memory/
         short_term_memory.dart       # ShortTermMemory (TAREFA 7) — histórico
@@ -581,7 +601,23 @@ lib/
         molly_agent_service.dart     # núcleo: texto -> AiCommandService ->
                                       # despacha para MollyRiskPolicy ou
                                       # métodos internos. Sem estado, nunca
-                                      # acessa Firestore direto.
+                                      # acessa Firestore direto. Sessão 24:
+                                      # também anexa proposta de memória de
+                                      # longo prazo (ComandoAction.memoria),
+                                      # só se o interruptor geral estiver
+                                      # ligado — nunca decide salvar sozinho
+        molly_reminder_parser.dart   # MollyReminderParser (sessão 24) —
+                                      # extrairData/extrairHora/limparTitulo/
+                                      # inferirTipo/inferirRecorrencia,
+                                      # portados de elderly_screen.dart pra
+                                      # a coleta de dia/hora funcionar de
+                                      # verdade na Molly nova
+        molly_proactive_service.dart # MollyProactiveService (sessão 24,
+                                      # Fase 8) — avisa remédio atrasado
+                                      # (>30min, não confirmado) assim que
+                                      # o painel abre, sem o usuário
+                                      # perguntar. gerarAviso() é pura
+                                      # (testável sem Firebase)
         molly_tool_registry.dart     # catálogo de ferramentas (TAREFA 3)
         molly_risk_policy.dart       # LOW roda direto; MEDIUM roda direto
                                       # exceto se ambíguo; CRITICAL sempre
@@ -617,11 +653,20 @@ lib/
                                       # TAREFA 18: + possivelEmergencia
                                       # (frases suaves — confirmação visual
                                       # com contagem, não disparo direto)
+                                      # TAREFA 19: 3 guardas contra falso
+                                      # positivo na detecção das frases
+                                      # suaves — palavra inteira (\p{L},
+                                      # não \b — acentos), negação e
+                                      # relato de passado
         molly_voice_service.dart     # STT+TTS (TAREFA 5) — única classe
                                       # instanciável da MOLLY; estados
                                       # idle/listening/thinking/speaking/
                                       # error via ValueNotifier. Detecção
-                                      # de "SOCORRO" NÃO mora aqui.
+                                      # de "SOCORRO" NÃO mora aqui. Sessão
+                                      # 24: flag _descartado evita usar um
+                                      # ValueNotifier já disposed quando a
+                                      # tela fecha com uma fala em andamento
+                                      # (bug real achado em teste ao vivo)
       tools/
         reminder_tool.dart           # createReminder/get{Today,Tomorrow}
                                       # Reminders/updateReminder/deleteReminder/
@@ -683,9 +728,12 @@ test/
   molly_briefing_service_test.dart   # 5 testes da TAREFA 13, 100% puro Dart
   molly_intent_test.dart             # testes das TAREFAs 14/15, 100% puro Dart
   wake_word_service_test.dart        # 4 testes da TAREFA 16, 100% puro Dart
-  offline_intent_service_test.dart   # 13 testes das TAREFAs 17/18, 100% puro Dart
+  offline_intent_service_test.dart   # 17 testes das TAREFAs 17/18/19, 100% puro Dart
   short_term_memory_test.dart        # 6 testes da TAREFA 7, 100% puro Dart
   molly_memory_screen_test.dart      # 4 testes da TAREFA 9, incluindo o interruptor de ponta a ponta
+  molly_reminder_parser_test.dart    # 13 testes da coleta de dia/hora (sessão 24), 100% puro Dart
+  molly_memory_gatilho_test.dart     # 6 testes do gatilho de memória (sessão 24), 100% puro Dart
+  molly_proactive_service_test.dart  # 8 testes da proatividade (sessão 24), 100% puro Dart
   support/
     firebase_core_mocks.dart         # mocks do Firebase Core p/ testes de widget
 

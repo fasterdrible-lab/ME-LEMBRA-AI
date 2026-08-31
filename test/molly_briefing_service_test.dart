@@ -18,7 +18,7 @@ void main() {
       dateTime: DateTime(agora.year, agora.month, agora.day, hora),
       repeat: 'unico',
       notification: '',
-      perfil: 'Vovô / Vovó',
+      perfil: 'Melhor Idade',
     );
   }
 

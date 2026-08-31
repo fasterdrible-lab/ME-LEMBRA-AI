@@ -16,6 +16,7 @@ import '../../services/voice_service.dart';
 import '../../services/sos_feed_service.dart';
 import '../family/family_contact_sheet.dart';
 import '../maps/map_screen.dart';
+import '../molly/widgets/molly_assistant_panel.dart';
 import '../vehicle/vehicle_screen.dart';
 import 'meus_lembretes_screen.dart';
 
@@ -1194,7 +1195,7 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F4FB),
       appBar: AppBar(
-        title: const Text('Modo Idoso', style: TextStyle(fontSize: 26)),
+        title: const Text('Melhor Idade', style: TextStyle(fontSize: 26)),
         backgroundColor: _primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -1230,10 +1231,21 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
               ),
               const SizedBox(height: 16),
               _botaoGrande(
-                icon: _isListening ? Icons.mic : Icons.mic_none,
-                label: _isListening ? 'Ouvindo...' : 'Falar Comando',
-                color: _isListening ? Colors.orange : _primary,
-                onPressed: _falarComando,
+                icon: Icons.mic_none,
+                label: 'Assistente Molly',
+                color: _primary,
+                // Sessão 24: troca do assistente conversacional antigo
+                // (_falarComando, lógica inline abaixo) pela MOLLY nova —
+                // validada primeiro com a coleta local de dia/hora
+                // (MollyReminderParser) pra não perder a capacidade de
+                // criar lembrete por voz sem dizer a data/hora na primeira
+                // frase. Abre como bottom sheet (não navega pra /molly):
+                // já começa a ouvir sozinho, mesma sensação imediata do
+                // antigo "Falar Comando", sem trocar de tela. _falarComando
+                // não foi removido de propósito (ver
+                // docs/MOLLY_ARCHITECTURE_ANALYSIS.md, seção 5) — reverter
+                // é só trocar esta linha de volta.
+                onPressed: () => MollyAssistantPanel.abrirComoAtalho(context),
                 height: 90,
                 fontSize: 26,
               ),

@@ -15,7 +15,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
   /// Mapeia o nome do perfil para a rota dedicada.
   String _routeForProfile(String perfil) {
     switch (perfil) {
-      case 'Vovô / Vovó':
+      case 'Melhor Idade':
         return '/elderly';
       case 'Adulto':
         return '/adult';
@@ -233,7 +233,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
               const SizedBox(height: 12),
               // ── Cards ────────────────────────────────────────
               _cardPerfil(
-                'Vovô / Vovó',
+                'Melhor Idade',
                 Icons.elderly,
                 const Color(0xFF4A90D9),
                 'Interface acessível com alertas por voz e SOS',

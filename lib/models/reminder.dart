@@ -10,7 +10,7 @@ class Reminder {
   final String repeat; // 'unico', 'diario', 'semanal'
   final String notification;
   final bool confirmed;
-  final String perfil; // 'Vovô / Vovó', 'Adulto', 'Filhos'
+  final String perfil; // 'Melhor Idade', 'Adulto', 'Filhos' (ou o legado 'Vovô / Vovó')
 
   Reminder({
     required this.id,
