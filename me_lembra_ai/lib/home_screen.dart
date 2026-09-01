@@ -7,6 +7,7 @@ import 'create_reminder_screen.dart';
 import 'reminders_screen.dart';
 import 'categories_screen.dart';
 import 'config_screen.dart';
+import 'elderly_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,7 +32,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _carregarPerfil() async {
     final perfil = await ProfileService.getProfile();
-    if (mounted) setState(() => _perfil = perfil ?? 'Voce');
+    if (mounted) {
+      setState(() => _perfil = perfil ?? '');
+      if (perfil == 'Vovô / Vovó') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ElderlyScreen()),
+            );
+          }
+        });
+      }
+    }
   }
 
   Future<void> _carregarNome() async {
