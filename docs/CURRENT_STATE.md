@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.5.2+23` |
-| APK atual | `me-lembra-ai-v1.4.2.apk` — 63.9 MB (v1.5.0 ainda não gerada em release, só debug) |
+| Versão do app | `1.6.0+24` |
+| APK atual | `me-lembra-ai-v1.6.0.apk` — 65.7 MB, gerado em 12/10/2026 (sessão 25): Molly com segurança/medicamentos, família, configurações, aviso de remédio, internet (tempo/notícias/curiosidades) + Modo Proteção `health`. Assinado com a chave de debug desta máquina (mesma dos APKs anteriores — instala por cima sem perder dados). Testado no aparelho de referência: abre sem crash, Modo Proteção `types=0x100` |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |

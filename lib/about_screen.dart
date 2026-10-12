@@ -25,7 +25,7 @@ class _AboutScreenState extends State<AboutScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _versao = info.version);
     } catch (_) {
-      if (mounted) setState(() => _versao = '1.5.2');
+      if (mounted) setState(() => _versao = '1.6.0');
     }
   }
 
@@ -65,7 +65,7 @@ class _AboutScreenState extends State<AboutScreen> {
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
-                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.5.2',
+                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.6.0',
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
