@@ -121,10 +121,15 @@ Referência: mínimo de 48 × 48 dp (Material); para 60+, quanto maior melhor.
 - ✅ Toda resposta é falada (pode ser desligado em Configurações da Molly).
 - ✅ Lembretes falados em voz alta no horário no perfil Melhor Idade —
   mas só com o app aberto ou usado há pouco (timer dentro do app).
-- ❌ O canal de notificação reforçado do idoso (`me_lembra_ai_idoso`:
-  prioridade máxima, tela cheia, vibração intensa) existe em
-  `notification_service.dart`, mas **não é usado**: `_androidDetailsForProfile`
-  não é chamado por ninguém, e todos os lembretes saem no canal comum.
+- ✅ Canal de notificação reforçado do idoso (`me_lembra_ai_idoso`):
+  prioridade máxima, vibração longa (3 × 0,8 s), categoria "lembrete",
+  visível na tela bloqueada. Existia sem uso até a sessão 25; agora todo
+  lembrete (e o "conseguiu tomar seu remédio?") do perfil Melhor Idade sai
+  nele. Lembretes agendados antes continuam no canal comum até serem
+  recriados/editados.
+- ⚠️ "Tela cheia" (acender a tela e abrir por cima de tudo) não funciona:
+  exige a permissão `USE_FULL_SCREEN_INTENT`, não declarada — a Play Store
+  só a libera para apps de alarme/chamada.
 - ✅ Início da escuta tem o bipe do próprio reconhecimento de voz do Android.
 - ⚠️ Sem som próprio de "não entendi" / "terminei de ouvir" — só a fala.
 - ⚠️ Sem vibração ao começar a ouvir (ajudaria quem ouve mal).
@@ -159,4 +164,5 @@ achados neste arquivo, numa seção nova com a data.
 
 | Data | O que mudou |
 |---|---|
-| 12/10/2026 | Checklist criado. Corrigidas as cores de "Pensando..." (2,3 → 4,7 : 1) e "Falando..." (2,1 → 5,1 : 1). Pendências: fontes de 14–15 px (dica, descrições, manual), azul no limite, modo escuro não auditado, feedback sonoro/vibração ao ouvir, canal de notificação reforçado do idoso não usado. Nenhum teste com idosos feito ainda. |
+| 12/10/2026 | Checklist criado. Corrigidas as cores de "Pensando..." (2,3 → 4,7 : 1) e "Falando..." (2,1 → 5,1 : 1). Pendências: fontes de 14–15 px (dica, descrições, manual), azul no limite, modo escuro não auditado, feedback sonoro/vibração ao ouvir. Nenhum teste com idosos feito ainda. |
+| 12/10/2026 | Canal reforçado do idoso passou a ser usado (prioridade máxima + vibração longa). Tela cheia segue pendente (permissão). |

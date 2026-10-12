@@ -102,7 +102,7 @@ Aplicativo de lembretes acessível para famílias. Possui quatro perfis independ
 - [x] Categorias: Remédio, Consulta, Aniversário, Mercado, Reunião, Tomar, Compras
 - [x] Repetição: único, diário, semanal
 - [x] Notificações locais agendadas (únicas e recorrentes)
-- [ ] Notificações por perfil (canal idoso com fullScreen, canal criança leve) — **os canais existem, mas não são usados**: `_androidDetailsForProfile` em `notification_service.dart` não tem chamador; todo lembrete sai no canal comum `me_lembra_ai_channel` (achado na sessão 25, checklist de acessibilidade)
+- [x] Notificações por perfil (canal idoso reforçado: prioridade máxima + vibração longa; canal criança leve) — os canais existiam sem uso até a sessão 25 (`_androidDetailsForProfile` não tinha chamador); agora `scheduleReminder`/`scheduleRepeatingReminder` e o acompanhamento de remédio usam o canal do perfil. **Tela cheia não funciona**: falta a permissão `USE_FULL_SCREEN_INTENT` (restrita pela Play Store a apps de alarme/chamada)
 - [x] Confirmação de lembrete realizado
 - [x] Histórico de confirmações (últimos 30 dias)
 

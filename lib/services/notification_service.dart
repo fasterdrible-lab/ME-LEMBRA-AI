@@ -34,22 +34,15 @@ class NotificationService {
         repeat: repeat,
       );
 
-      const androidDetails = AndroidNotificationDetails(
-        'me_lembra_ai_channel',
-        'Lembretes',
-        channelDescription: 'Notificações de lembretes do Me Lembra AI',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        icon: '@mipmap/ic_launcher',
-      );
+      // Canal conforme o perfil (Melhor Idade: reforçado; Filhos: leve).
+      final androidDetails = await _androidDetailsForProfile();
 
       const iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
       );
+      final detalhes = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
       tz.TZDateTime nextInstance = tzDate;
       DateTime now = DateTime.now();
@@ -63,7 +56,7 @@ class NotificationService {
           title,
           body,
           nextInstance,
-          const NotificationDetails(android: androidDetails, iOS: iosDetails),
+          detalhes,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
@@ -80,7 +73,7 @@ class NotificationService {
           title,
           body,
           nextInstance,
-          const NotificationDetails(android: androidDetails, iOS: iosDetails),
+          detalhes,
           androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.absoluteTime,
@@ -173,22 +166,14 @@ class NotificationService {
         return;
       }
 
-      const androidDetails = AndroidNotificationDetails(
-        'me_lembra_ai_channel',
-        'Lembretes',
-        channelDescription: 'Notificações de lembretes do Me Lembra AI',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        icon: '@mipmap/ic_launcher',
-      );
+      // Só chega aqui no perfil Melhor Idade → canal reforçado.
+      final androidDetails = await _androidDetailsForProfile();
       await _plugin.zonedSchedule(
         idAcompanhamento(idLembrete),
         'Você conseguiu tomar seu remédio?',
         '${body.trim()} — toque para responder à Molly.',
         tz.TZDateTime.from(quando, tz.local),
-        const NotificationDetails(android: androidDetails),
+        NotificationDetails(android: androidDetails),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: repeat == 'diario'
@@ -276,7 +261,13 @@ class NotificationService {
     final perfil = await ProfileService.getProfile();
     switch (perfil) {
       case 'Melhor Idade':
-        return const AndroidNotificationDetails(
+        // Sessão 25: este canal existia mas nunca era usado (todo lembrete
+        // saía no canal comum). Agora é. Canal novo no aparelho, então a
+        // vibração definida aqui vale (Android não deixa mudar canal já
+        // criado). fullScreenIntent só tem efeito com a permissão
+        // USE_FULL_SCREEN_INTENT no manifest, que hoje NÃO está declarada
+        // (restrita pela Play Store a apps de alarme/chamada).
+        return AndroidNotificationDetails(
           'me_lembra_ai_idoso',
           'Lembretes (Idoso)',
           channelDescription: 'Notificações reforçadas para o perfil idoso',
@@ -284,6 +275,9 @@ class NotificationService {
           priority: Priority.max,
           playSound: true,
           enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 800, 400, 800, 400, 800]),
+          category: AndroidNotificationCategory.reminder,
+          visibility: NotificationVisibility.public,
           fullScreenIntent: true,
           icon: '@mipmap/ic_launcher',
         );
@@ -427,16 +421,8 @@ class NotificationService {
 
     final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
 
-    const androidDetails = AndroidNotificationDetails(
-      'me_lembra_ai_channel',
-      'Lembretes',
-      channelDescription: 'Notificações de lembretes do Me Lembra AI',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      icon: '@mipmap/ic_launcher',
-    );
+    // Canal conforme o perfil (Melhor Idade: reforçado; Filhos: leve).
+    final androidDetails = await _androidDetailsForProfile();
 
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -449,7 +435,7 @@ class NotificationService {
       title,
       body,
       tzDate,
-      const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
