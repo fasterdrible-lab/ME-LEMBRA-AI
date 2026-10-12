@@ -68,8 +68,19 @@ class MollySafetyService {
   /// ela contiver algo que a MOLLY nunca pode dizer.
   static String filtrarFalaDaIA(String fala) {
     final t = _normalizar(fala);
-    return _saidaProibida.any((r) => r.hasMatch(t)) ? falaSaidaBloqueada : fala;
+    if (_saidaProibida.any((r) => r.hasMatch(t))) return falaSaidaBloqueada;
+    // TAREFA 29: a fala livre da IA nunca executa nada — se ela "conta" que
+    // excluiu/ligou/mandou/acionou algo, é invenção. (As ferramentas de
+    // verdade, ex. "Mandei para Ana", não passam por este filtro.)
+    if (_acaoInventada.hasMatch(t)) return falaAcaoInventada;
+    return fala;
   }
+
+  static const String falaAcaoInventada =
+      'Isso eu não consigo fazer por aqui. Posso te ajudar com lembretes, avisos para a família ou o SOS.';
+
+  static final RegExp _acaoInventada = RegExp(
+      r'\b(exclui|apaguei|deletei|removi|liguei|telefonei|mandei|enviei|avisei|chamei|disparei|acionei|cancelei)\b');
 
   // ---------------------------------------------------------------------
 

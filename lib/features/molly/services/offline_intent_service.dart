@@ -21,6 +21,7 @@ enum OfflineIntent {
   confirmarRemedio,
   contatoEmergencia,
   familia,
+  excluirLembretes,
   nenhuma,
 }
 
@@ -78,6 +79,9 @@ class OfflineIntentService {
 
     if (t.toUpperCase().contains('SOCORRO')) return OfflineIntent.socorro;
     if (_pareceEmergenciaSuave(tLower)) return OfflineIntent.possivelEmergencia;
+    // TAREFA 29: excluir lembrete por voz nunca é executado (nem pela IA,
+    // que não tem essa ação mas poderia "dizer" que excluiu).
+    if (_pedeExcluirLembrete(tLower)) return OfflineIntent.excluirLembretes;
     // TAREFA 20 — antes de "meus lembretes": "quem acompanha meus
     // lembretes?" é pergunta de família, não pedido pra ouvir os lembretes.
     if (MollyFamilyIntent.classificar(t) != null) return OfflineIntent.familia;
@@ -104,7 +108,17 @@ class OfflineIntentService {
         return MollyRiskPolicy.executar('getTodayReminders', const {});
       case OfflineIntent.ligarPara:
         final nome = _extrairLigarPara(texto.trim().toLowerCase())!;
-        return MollyRiskPolicy.executar('callFamilyMember', {'nomeFamiliar': nome});
+        // Resolve ANTES da confirmação (CRITICAL): a pergunta sai com o
+        // nome de verdade ("avise Ana"), e "qualquer pessoa"/"minha filha"
+        // ambíguo nem chega a ser confirmado (TAREFA 29).
+        final resolucao = await FamilyTool.resolver(nome);
+        final membro = resolucao.membro;
+        if (membro == null) {
+          return MollyToolResult.falha(resolucao.falaProblema!, acao: 'callFamilyMember');
+        }
+        return MollyRiskPolicy.executar('callFamilyMember', {'nomeFamiliar': membro.nome});
+      case OfflineIntent.excluirLembretes:
+        return MollyToolResult.sucesso(falaExcluirPelaVoz, acao: 'excluir_bloqueado');
       case OfflineIntent.confirmarRemedio:
         return _confirmarRemedio();
       case OfflineIntent.contatoEmergencia:
@@ -235,6 +249,21 @@ class OfflineIntentService {
   static bool _ehConfirmarRemedio(String t) =>
       (t.contains('confirmar') || t.contains('confirma')) &&
       (t.contains('remédio') || t.contains('remedio') || t.contains('medicamento'));
+
+  static const String falaExcluirPelaVoz =
+      'Por segurança, eu não apago lembretes pela voz. '
+      'Para excluir, abra Meus Lembretes e toque na lixeira do lembrete.';
+
+  /// "exclua todos os meus lembretes", "apaga o lembrete do dentista",
+  /// "deleta tudo", "limpa minha agenda" — verbo de apagar + algo de
+  /// lembrete/agenda/tudo. "apaga a luz" ou "esqueci de apagar o fogo" não.
+  static bool _pedeExcluirLembrete(String t) {
+    // "me lembra de limpar a casa todos os dias" é PEDIDO DE LEMBRETE.
+    if (RegExp(r'^(molly,?\s*)?(me lembr|lembra|não deixa|nao deixa|coloca|marca|anota)').hasMatch(t)) return false;
+    const verbo = r'(exclu[ií]|exclua|excluir|apag[ae]|apagar|delet[ae]|deletar|remov[ae]|remover|limp[ae]|limpar|cancel[ae]|cancelar)';
+    if (RegExp('\\b$verbo\\b.*\\b(lembretes?|agenda|alarmes?|compromissos?)\\b').hasMatch(t)) return true;
+    return RegExp('\\b$verbo\\s+tudo\\b').hasMatch(t); // "apaga tudo"
+  }
 
   /// TAREFA 20 (integração com família). Mensagem sem conteúdo ("manda
   /// mensagem pro meu filho") devolve uma pergunta com `coletar_mensagem`

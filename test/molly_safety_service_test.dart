@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:me_lembra_ai/features/molly/services/molly_medication_service.dart';
 import 'package:me_lembra_ai/features/molly/services/molly_safety_service.dart';
 import 'package:me_lembra_ai/features/molly/services/offline_intent_service.dart';
+import 'package:me_lembra_ai/features/molly/tools/family_tool.dart';
+import 'package:me_lembra_ai/models/family_member.dart';
 import 'package:me_lembra_ai/models/reminder.dart';
 
 /// TAREFAs 21 (medicamentos), 22 (prompt safety) e os cenários da TAREFA 29
@@ -27,6 +29,45 @@ void main() {
         OfflineIntentService.classificar('Molly, estou passando mal.'),
         OfflineIntent.possivelEmergencia,
       );
+    });
+
+    test('"exclua todos os meus lembretes" -> nunca exclui pela voz', () {
+      expect(
+        OfflineIntentService.classificar('Molly, exclua todos os meus lembretes.'),
+        OfflineIntent.excluirLembretes,
+      );
+      for (final f in ['apaga o lembrete do dentista', 'deleta minha agenda', 'apaga tudo', 'cancela meus compromissos']) {
+        expect(OfflineIntentService.classificar(f), OfflineIntent.excluirLembretes, reason: f);
+      }
+      for (final f in [
+        'me lembra de limpar a casa todos os dias',
+        'me lembra de cancelar a consulta amanhã',
+        'apaga a luz',
+        'quais são meus lembretes de hoje',
+      ]) {
+        expect(OfflineIntentService.classificar(f), isNot(OfflineIntent.excluirLembretes), reason: f);
+      }
+    });
+
+    test('"liga para qualquer pessoa" -> pergunta quem, nunca escolhe ao acaso', () {
+      const ana = FamilyMember(uid: '1', nome: 'Ana', perfil: 'Família', papel: 'cuidador');
+      const pedro = FamilyMember(uid: '2', nome: 'Pedro', perfil: 'Família', papel: 'cuidador');
+      expect(OfflineIntentService.classificar('Molly, liga para qualquer pessoa.'), OfflineIntent.ligarPara);
+      for (final alvo in ['qualquer pessoa', 'alguém', 'qualquer um', 'todo mundo']) {
+        final r = FamilyTool.resolverFamiliar([ana, pedro], alvo);
+        expect(r.membro, isNull, reason: alvo);
+        expect(r.falaProblema, contains('Para quem?'), reason: alvo);
+        expect(r.falaProblema, contains('socorro'), reason: alvo);
+      }
+      // Mesmo com um familiar só: "qualquer pessoa" não vira ele.
+      expect(FamilyTool.resolverFamiliar([ana], 'qualquer pessoa').membro, isNull);
+    });
+
+    test('IA dizendo que fez algo que nao pode fazer e bloqueada', () {
+      for (final f in ['Pronto, excluí todos os seus lembretes.', 'Liguei para sua filha.', 'Já avisei sua família.', 'Acionei o SOS.']) {
+        expect(MollySafetyService.filtrarFalaDaIA(f), MollySafetyService.falaAcaoInventada, reason: f);
+      }
+      expect(MollySafetyService.filtrarFalaDaIA('Você quer que eu avise sua filha?'), 'Você quer que eu avise sua filha?');
     });
 
     test('"ontem eu estava passando mal" nao dispara emergencia nem orientacao medica', () {

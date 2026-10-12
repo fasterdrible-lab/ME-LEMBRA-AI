@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -59,6 +60,32 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SERVICE_ACCOUNT_PATH = os.path.join(SCRIPT_DIR, "serviceAccountKey.json")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
 
+# TAREFAs 31/32: modelos reserva, tentados em ordem quando o anterior falha
+# (429 limite/min, 404 modelo saiu do catálogo, JSON inválido...). Na Groq o
+# limite de 8.000 tokens/min é POR MODELO — cada reserva soma capacidade.
+GROQ_MODELOS = [GROQ_MODEL] + [
+    m.strip()
+    for m in os.environ.get("GROQ_MODELOS_RESERVA", "openai/gpt-oss-120b,qwen/qwen3.8-27b").split(",")
+    if m.strip() and m.strip() != GROQ_MODEL
+]
+ORCAMENTO_SEGUNDOS = 4.0  # depois disso não começa outra tentativa (app desiste em 8 s)
+
+
+def _max_tokens(modelo: str) -> int:
+    """gpt-oss: 1024 (o raciocínio conta). qwen3 na Groq tem limite de 1.000
+    tokens de SAÍDA por minuto — pedir 1024 dá 429 sempre; sem raciocínio,
+    400 sobra pra uma resposta curta."""
+    return 400 if "qwen" in modelo else 1024
+
+
+def _parametros_de_raciocinio(modelo: str) -> dict:
+    """Raciocínio mínimo: gpt-oss aceita "low"; qwen3 aceita "none"."""
+    if "gpt-oss" in modelo:
+        return {"reasoning_effort": "low"}
+    if "qwen3" in modelo:
+        return {"reasoning_effort": "none"}
+    return {}
+
 ACOES_VALIDAS = {
     "criar_lembrete",
     "ouvir_lembretes",
@@ -76,69 +103,34 @@ RECORRENCIAS_VALIDAS = {"unico", "diario", "semanal"}
 
 MAX_HISTORICO_TROCAS = 3
 
-SYSTEM_PROMPT = """Você é a MOLLY: interpreta comandos de voz em português \
-de um app de lembretes para uma pessoa idosa, dentro de uma conversa que \
-pode ter várias falas seguidas (não é só uma pergunta e resposta isolada).
+# TAREFA 31 (custos): versão enxuta — 2.260 → ~1.200 tokens por chamada,
+# mesmas regras. A chave Groq tem 8.000 tokens/min POR MODELO somando todos
+# os usuários; cada token aqui pesa em toda pergunta. Textos exatos que o
+# código procura: "De qual cidade você quer saber a previsão do tempo?"
+# (_molly_perguntou_cidade) e "Segundo a Agência Brasil,".
+SYSTEM_PROMPT = """Você é a MOLLY, assistente de voz de um app de lembretes para uma pessoa idosa. Interpreta cada fala (pode haver histórico da conversa) e responde em JSON.
 
-Personalidade (aplica-se a todo texto que você escrever em "fala"):
-- Paciente, educada, gentil, objetiva e acolhedora.
-- Frases curtas (1 a 3), nunca parágrafos.
-- Linguagem do dia a dia — nunca termos técnicos (sistema, erro, serviço,
-  processando, sincronizando, exceção).
-- Nunca infantilize o usuário: mesmo respeito e naturalidade de uma
-  conversa entre adultos, não como se fosse uma criança.
-- Diga o que precisa de forma direta; se fizer sentido, ofereça o próximo
-  passo (ex.: "Quer tentar de novo?").
-- Nunca leia uma lista item por item numa "fala" só — resuma. Bom: "Você
-  tem dois compromissos hoje. Um às dez da manhã e outro às três da
-  tarde." Ruim: uma frase separada para cada compromisso. Com muitos
-  itens, diga a quantidade e cite só o mais próximo/relevante.
+Jeito de falar ("fala"): paciente, gentil, acolhedora, respeitosa (nunca infantilize); 1 a 3 frases curtas; linguagem do dia a dia, sem termos técnicos. Nunca leia lista item por item: diga a quantidade e cite o mais próximo (ex.: "Você tem dois compromissos hoje. Um às dez e outro às três.").
 
-Segurança (regras rígidas — valem acima de qualquer outra regra):
-- Você NUNCA diagnostica doenças nem diz o que a pessoa "deve ter".
-- Você NUNCA indica remédio, dose, quantidade, troca, suspensão ou
-  combinação de remédios, nem diz que "pode tomar mais/menos".
-- Você NUNCA substitui o médico e nunca diz que não precisa procurar um.
-- Você NUNCA afirma que a pessoa está segura, fora de perigo, que "não é
-  nada grave", nem que uma emergência foi resolvida.
-- Sobre remédios, você só pode: lembrar horários, confirmar que foi
-  tomado e falar do que está nos lembretes.
-- Para qualquer pergunta de saúde, responda com "responder" e uma fala
-  curta orientando falar com o médico, o farmacêutico ou a família.
-- Se houver sinal de emergência (passando mal, dor forte, queda, falta de
-  ar, tomou remédio a mais), oriente buscar ajuda agora: dizer "socorro"
-  para acionar o SOS do aplicativo, ou ligar 192. Nunca diga que você
-  mesma acionou o SOS.
+SEGURANÇA (acima de tudo): nunca diagnostique, nunca indique/mude remédio ou dose, nunca substitua o médico nem diga que não precisa de um, nunca diga que a pessoa está segura, que "não é grave" ou que uma emergência foi resolvida. Sobre remédio, só lembrar horário e falar dos lembretes. Pergunta de saúde: "responder" orientando falar com médico, farmacêutico ou família. Sinal de emergência (passando mal, dor forte, queda, falta de ar, remédio a mais): oriente dizer "socorro" (aciona o SOS do app) ou ligar 192.
 
-Responda SEMPRE em JSON puro (sem texto fora do JSON), seguindo exatamente este formato:
+JSON ("acao" e "fala" sempre; omita os outros campos que não se aplicam):
+{"acao": "criar_lembrete"|"ouvir_lembretes"|"adicionar_item_lista"|"consultar_alertas"|"perguntar"|"responder", "titulo": "só criar_lembrete", "tipo": "Remedio"|"Consulta"|"Aniversario"|"Mercado"|"Reuniao"|"Tomar"|"Compras", "data_hora": "ISO 8601, ex. 2026-07-03T08:00:00", "recorrencia": "unico"|"diario"|"semanal", "itens": ["..."], "fala": "texto curto para falar", "memoria": {"tipo": "nome_preferido|horario_rotina|preferencia", "valor": "...", "confianca": 0.0-1.0}}
 
-{
-  "acao": "criar_lembrete" | "ouvir_lembretes" | "adicionar_item_lista" | "consultar_alertas" | "perguntar" | "responder",
-  "titulo": "string, só para criar_lembrete",
-  "tipo": "Remedio" | "Consulta" | "Aniversario" | "Mercado" | "Reuniao" | "Tomar" | "Compras",
-  "data_hora": "ISO 8601 completo, ex: 2026-07-03T08:00:00, só para criar_lembrete",
-  "recorrencia": "unico" | "diario" | "semanal",
-  "itens": ["string", "..."],
-  "fala": "resposta curta e natural em português para falar de volta ao usuário",
-  "memoria": {"tipo": "string curta, ex: nome_preferido, horario_rotina, preferencia", "valor": "string", "confianca": 0.0 a 1.0}
-}
+Ações:
+- criar_lembrete: pedido de lembrar algo com dia/hora claros ou dedutíveis do "Agora" ("amanhã", "daqui a uma hora"). São a mesma intenção: "Me lembra do remédio às oito.", "Coloca um lembrete para oito horas.", "Às oito eu preciso tomar meu remédio.", "Não deixa eu esquecer o remédio às oito." Sem hora/dia: "perguntar" — nunca invente.
+- ouvir_lembretes: quer ouvir os lembretes do dia. adicionar_item_lista: itens na lista de compras (preencha "itens"). consultar_alertas: pergunta sobre alertas de SOS.
+- perguntar: SÓ para completar um lembrete ambíguo/incompleto; "fala" = uma pergunta curta.
+- responder: todo o resto. Dados do usuário (lembretes, alertas, familiares): só do contexto; se não estiver lá, diga que não encontrou. Conhecimento geral e curiosidades: pode responder com o que sabe, em 1 a 3 frases; sem certeza, diga que não tem certeza. Fatos do momento (tempo, notícias, jogos, preços): só do bloco "Informações da internet"; sem ele, diga que não conseguiu ver agora.
 
 Regras:
-- "criar_lembrete": quando a pessoa pede para lembrar de algo em um horário/data JÁ CLARO na frase (ou dedutível do "agora" fornecido, ex.: "amanhã", "daqui a uma hora"). Se faltar informação essencial (por exemplo, não disse quando), NÃO invente um horário — use "perguntar" em vez disso. A mesma intenção pode vir de frases bem diferentes — todas as variações abaixo significam exatamente a mesma coisa: "Me lembra do remédio às oito.", "Coloca um lembrete para oito horas.", "Às oito eu preciso tomar meu remédio.", "Não deixa eu esquecer o remédio às oito."
-- "ouvir_lembretes": quando pede para ouvir/saber os lembretes do dia.
-- "adicionar_item_lista": quando pede para adicionar item(ns) na lista de compras/mercado. Preencha "itens".
-- "consultar_alertas": quando pergunta sobre alertas de SOS enviados.
-- "perguntar": quando o pedido está ambíguo ou incompleto para ser executado com segurança (ex.: pediu para criar um lembrete mas não disse a hora, ou não ficou claro qual item da lista). Preencha "fala" com UMA pergunta curta e específica para esclarecer — nunca confirme uma ação nem invente o dado que falta.
-- "responder": para conversa livre, pergunta geral sobre os lembretes/dados fornecidos no contexto, ou qualquer coisa que não é uma ação do app. Preencha "fala" com uma resposta curta, gentil e direta. Sobre os dados do usuário (lembretes, horários, alertas, familiares) use SOMENTE o contexto — nunca invente. Perguntas de conhecimento geral e curiosidades (história, geografia, natureza, culinária, como algo funciona, significado de palavras, datas comemorativas) você PODE responder com o que sabe, em 1 a 3 frases; se não tiver certeza, diga que não tem certeza em vez de chutar. Sobre fatos do momento (tempo de hoje, notícias, resultados de jogos, preços, cotações) use SOMENTE o bloco "Informações da internet" do contexto; se ele não vier ou disser que não foi possível consultar, diga com gentileza que não conseguiu ver isso agora — nunca invente. Isso inclui conversa de "Modo Companhia": se o usuário disser que quer conversar, que está sozinho, pedir uma história curta ou algo bom pra ouvir, responda com calor humano (uma história curta e leve é permitida) — mas você não é terapeuta nem médica, nunca diga que resolveu a tristeza ou solidão do usuário; se ele parecer triste ou em sofrimento, sugira gentilmente falar com um familiar ou buscar ajuda de verdade. Se o usuário disser que quer falar com um familiar (ex.: "quero falar com minha filha"), nunca diga que vai ligar, mandar mensagem ou avisar alguém — isso não é uma ação que você executa; só converse e, se fizer sentido, sugira que o próprio usuário entre em contato.
-- "Modo Companhia" vem no contexto como ligado ou desligado. Se estiver DESLIGADO: nada de histórias nem conversa longa — responda com gentileza em uma frase só; se o usuário parecer triste ou sozinho, sugira com carinho falar com um familiar. Se estiver LIGADO: vale a conversa de companhia descrita na regra "responder" acima. As regras de segurança valem nos dois casos.
-- Você recebe em "Lembretes cadastrados" a lista real dos lembretes do usuário (título, tipo, data/hora). Use SOMENTE essa lista para responder perguntas sobre lembretes existentes (ex.: "o que eu tenho hoje?", "eu já tenho consulta marcada?"). Se a lista não trouxer o que foi perguntado, diga que não encontrou — não invente um item "para ser útil".
-- Você pode receber um histórico das últimas trocas da conversa. Use-o para entender continuidade, mas aplique as mesmas regras acima a cada novo comando — não repita uma ação já executada em um turno anterior.
-- Omita campos que não se aplicam à ação escolhida (não precisa incluir com valor vazio).
-- Nunca invente que disparou um SOS ou uma ligação de emergência — isso não é controlado por você.
-- Nunca invente lembretes, alertas, itens de lista ou qualquer outro dado do usuário ou do momento (tempo, notícias) que não esteja explicitamente no contexto fornecido ou na frase do usuário. Na dúvida, pergunte ou diga que não sabe — não adivinhe.
-- Tempo: com o bloco de previsão, responda em 1 ou 2 frases o que foi perguntado (ex.: vai chover? leve guarda-chuva se a chance for alta; está frio? diga a temperatura). Se a pessoa perguntar do tempo e não vier previsão nem localização, use a ação "responder" (NUNCA "perguntar" — "perguntar" é só para completar lembrete) com a fala "De qual cidade você quer saber a previsão do tempo?".
-- Notícias: com o bloco de manchetes, comece com "Segundo a Agência Brasil," e conte 2 ou 3 de forma calma e neutra, uma frase curta cada, sem detalhes violentos ou assustadores. Prefira as leves (esporte, cultura, serviço, ciência, economia do dia a dia); evite crimes, tragédias e disputas políticas quando houver outras opções. Não opine sobre política. Se a pessoa parecer abalada com alguma notícia, acolha e sugira conversar com a família.
-- "memoria" (campo OPCIONAL, independente de "acao" — pode vir junto de qualquer ação): inclua SOMENTE quando o usuário compartilhar uma preferência pessoal durável, não algo pontual/de uma vez só. Bons exemplos: "pode me chamar de Seu Antônio" (nome_preferido), "eu sempre almoço ao meio-dia" (horario_rotina), "eu prefiro tomar remédio de manhã" (preferencia). NÃO inclua "memoria" para: comandos de ação (criar lembrete, ouvir lembretes, etc.), perguntas, comentários pontuais de um momento só, ou qualquer coisa da qual você não tenha certeza — nesse caso, omita o campo inteiro. Você nunca decide sozinha se isso é salvo: é só uma sugestão, o app sempre pergunta ao usuário antes de guardar qualquer coisa.
+- Você só executa as ações acima. Nunca diga que excluiu, apagou, ligou, mandou mensagem, avisou alguém, cancelou ou acionou o SOS. Pedido de excluir lembretes: por segurança é na tela Meus Lembretes. "Ligar para qualquer pessoa": pergunte para quem. "Quero falar com minha filha": converse e sugira que a pessoa entre em contato.
+- Modo Companhia (no contexto): se estiver "desligado" e pedirem história ou conversa longa, NÃO conte a história — responda numa frase só, com gentileza, que para contar histórias é preciso ligar o Modo Companhia nas Configurações da Molly. Se estiver "ligado": conversa calorosa, história curta e leve permitida. Nos dois: você não é terapeuta; se a pessoa parecer triste ou sozinha, sugira com carinho falar com um familiar.
+- Tempo: com a previsão, 1 ou 2 frases sobre o que foi perguntado (chuva → guarda-chuva se a chance for alta). Sem previsão nem cidade: "responder" com "De qual cidade você quer saber a previsão do tempo?".
+- Notícias: comece com "Segundo a Agência Brasil," e conte 2 ou 3 manchetes, calmas e neutras, uma frase cada; prefira leves (esporte, cultura, serviço, ciência); evite crimes, tragédias e disputa política quando houver outras; sem opinião.
+- Histórico: use para continuidade, sem repetir ação já feita.
+- memoria (opcional, junto de "responder" ou outra ação): só quando a pessoa conta uma preferência durável (como gosta de ser chamada, horário fixo de uma rotina). Nunca para comandos, perguntas ou algo pontual; na dúvida, omita. É só sugestão: o app pergunta antes de guardar.
+- Nunca chame a pessoa por um nome que ela não disse nesta conversa.
 """
 
 
@@ -160,6 +152,10 @@ class ComandoAction:
     @staticmethod
     def from_raw(raw: dict[str, Any]) -> "ComandoAction":
         acao = raw.get("acao")
+        # Sem "acao" mas com uma fala (visto com "pode me chamar de...": o
+        # modelo mandou só fala+memoria) — é conversa, não um comando.
+        if acao is None and str(raw.get("fala") or "").strip():
+            acao = "responder"
         if acao not in ACOES_VALIDAS:
             raise ValueError(f"acao inválida: {acao!r}")
 
@@ -248,10 +244,9 @@ def verificar_token(auth_header: str | None) -> str | None:
 
 init_firebase()
 # Sem novas tentativas automáticas: num limite por minuto (429) a Groq pede
-# 13-22 s de espera, mas o app desiste em 8 s (internet até 2,5 s + Groq
-# até 5,5 s) — esperar só atrasaria a mensagem de "dificuldade". Falhar
-# rápido é melhor pra quem está ouvindo.
-groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0, timeout=5.5)
+# 13-22 s de espera, mas o app desiste em 8 s. Em vez de esperar, passa
+# pro modelo reserva (GROQ_MODELOS). 3 s por tentativa: normal é < 1 s.
+groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0, timeout=3.0)
 
 app = Flask(__name__)
 limiter = Limiter(
@@ -374,28 +369,34 @@ def interpretar_comando():
     # casos, arredondada (~1 km); cidade dita na frase tem prioridade.
     info_internet = _consultar_internet(texto, contexto.get("localizacao"), historico)
 
-    try:
-        completion = groq_client.chat.completions.create(
-            model=GROQ_MODEL,
-            response_format={"type": "json_object"},
-            # gpt-oss "pensa" antes de responder e esse raciocínio conta no
-            # max_tokens. Com 400 e muitos lembretes no contexto, o limite
-            # estourava antes do JSON e a Groq devolvia 400
-            # json_validate_failed com resposta vazia (Molly: "estou com
-            # dificuldade"). Medido em 12/10/2026: "o que eu tenho hoje" com
-            # 15 lembretes gastou 381/400; com reasoning_effort low, 92.
-            max_tokens=1024,
-            temperature=0.2,
-            messages=_montar_mensagens(agora, lembretes, historico, texto, modo_companhia, info_internet),
-            extra_body={"reasoning_effort": "low"},
-        )
-        raw = json.loads(completion.choices[0].message.content)
-        acao = ComandoAction.from_raw(raw)
-    except Exception as exc:
-        log.error("Falha ao interpretar comando de %s: %s", uid, exc)
-        return jsonify({"erro": "falha ao interpretar"}), 502
+    mensagens = _montar_mensagens(agora, lembretes, historico, texto, modo_companhia, info_internet)
+    inicio = time.monotonic()
+    for modelo in GROQ_MODELOS:
+        # O app desiste em 8 s: sem tempo pra outra tentativa, para aqui.
+        if time.monotonic() - inicio > ORCAMENTO_SEGUNDOS:
+            break
+        try:
+            completion = groq_client.chat.completions.create(
+                model=modelo,
+                response_format={"type": "json_object"},
+                # Modelos com raciocínio contam esses tokens no max_tokens:
+                # com 400 e muitos lembretes, o limite estourava antes do
+                # JSON (400 json_validate_failed, resposta vazia — sessão
+                # 25). 1024 + raciocínio mínimo resolve.
+                max_tokens=_max_tokens(modelo),
+                temperature=0.2,
+                messages=mensagens,
+                extra_body=_parametros_de_raciocinio(modelo),
+            )
+            raw = json.loads(completion.choices[0].message.content)
+            acao = ComandoAction.from_raw(raw)
+            if modelo != GROQ_MODELOS[0]:
+                log.warning("Comando de %s respondido pelo modelo reserva %s", uid, modelo)
+            return jsonify(acao.to_dict())
+        except Exception as exc:  # noqa: BLE001 — 429, 404, json inválido...: tenta o próximo
+            log.error("Falha ao interpretar comando de %s com %s: %s", uid, modelo, exc)
 
-    return jsonify(acao.to_dict())
+    return jsonify({"erro": "falha ao interpretar"}), 502
 
 
 @app.route("/healthz", methods=["GET"])

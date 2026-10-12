@@ -144,6 +144,13 @@ class FamilyTool {
     var alvo = alvoBruto.trim().toLowerCase().replaceFirst(RegExp(r'^(a|o|pra|pro|para|à|ao)\s+'), '');
     if (alvo.isEmpty) return const ResolucaoFamiliar.problema('Não entendi para quem.');
 
+    // TAREFA 29: "liga para qualquer pessoa" — nunca escolher alguém ao
+    // acaso; pergunta quem e lembra do "socorro" caso seja ajuda urgente.
+    if (_alvoVago.hasMatch(alvo)) {
+      return ResolucaoFamiliar.problema(
+          'Para quem? Seus familiares são: $todos. Se precisar de ajuda agora, diga socorro.');
+    }
+
     final parentesco = _parentesco.firstMatch(alvo);
     if (parentesco != null) {
       final resto = parentesco.group(1)!.trim();
@@ -171,6 +178,9 @@ class FamilyTool {
     }
     return ResolucaoFamiliar.problema('Não encontrei um familiar chamado $alvoBruto. Seus familiares são: $todos.');
   }
+
+  static final RegExp _alvoVago = RegExp(
+      r'^(qualquer (pessoa|um|uma|familiar|parente)|algu[ée]m|ningu[ée]m|todo mundo|todos|tanto faz)$');
 
   /// Palavra de parentesco no começo; o que vier depois (grupo 1) é o nome.
   /// `(?=\s|$)` em vez de `\b` por causa de "irmã" (acento quebra `\b`).

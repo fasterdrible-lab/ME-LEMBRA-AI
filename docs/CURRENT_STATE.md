@@ -364,7 +364,10 @@ JSON. O SOS nunca passa por aqui — continua 100% local no app.
 > JSON. Corrigido com `max_tokens=1024` + `reasoning_effort: low` (TASK-37).
 > Checklist de "Molly não responde": 404 (modelo saiu do catálogo), 401
 > (chave), 400 json_validate_failed (tokens), 429 (limite de 8.000
-> tokens/min da chave — o prompt sozinho tem ~1.900).
+> tokens/min POR MODELO). Desde a MOLLY-32 o prompt tem ~1.135 tokens e
+> há modelos reserva (`GROQ_MODELOS_RESERVA` no `.env`, padrão
+> `openai/gpt-oss-120b,qwen/qwen3.8-27b`) — procure "modelo reserva" no
+> `journalctl` para ver quando o principal falhou.
 >
 > **Sessão 24 — `app.py` ganhou o campo opcional `memoria`** (gatilho de
 > memória de longo prazo, MOLLY-23 em `TASKS.md`) — implantado do mesmo
