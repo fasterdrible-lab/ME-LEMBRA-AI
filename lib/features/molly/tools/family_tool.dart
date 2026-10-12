@@ -1,10 +1,9 @@
 import '../../../models/family_member.dart';
 import '../../../services/chat_service.dart';
-import '../../../services/family_service.dart';
-import '../../../services/profile_service.dart';
 import '../models/molly_risk_level.dart';
 import '../models/molly_tool_definition.dart';
 import '../models/molly_tool_result.dart';
+import '../services/molly_cache_service.dart';
 
 /// Ferramentas de família da MOLLY (TAREFA 3 do prompt mestre) — wrappers
 /// finos sobre `FamilyService`/`ChatService`, nenhuma chamada nova ao
@@ -16,7 +15,7 @@ class FamilyTool {
     risco: MollyRiskLevel.low,
     parametros: const [],
     executar: (_) async {
-      final membros = await FamilyService.stream().first;
+      final membros = await MollyCache.familiares();
       if (membros.isEmpty) {
         return MollyToolResult.sucesso(
           'Você ainda não tem nenhum familiar vinculado.',
@@ -45,16 +44,21 @@ class FamilyTool {
   static Future<MollyToolResult> _sendFamilyMessage(Map<String, dynamic> p) async {
     final nomeFamiliar = (p['nomeFamiliar'] as String).trim();
     final mensagem = (p['mensagem'] as String).trim();
-    final resolucao = resolverFamiliar(await FamilyService.stream().first, nomeFamiliar);
+    final resolucao = resolverFamiliar(await MollyCache.familiares(), nomeFamiliar);
     final membro = resolucao.membro;
     if (membro == null) {
       return MollyToolResult.falha(resolucao.falaProblema!, acao: 'sendFamilyMessage');
     }
     try {
-      await ChatService.send(membro.uid, mensagem);
+      final enviado = await MollyCache.escrever(() => ChatService.send(membro.uid, mensagem));
       // Repete o que foi mandado: o texto veio do reconhecimento de voz e a
       // pessoa precisa ouvir se saiu certo.
-      return MollyToolResult.sucesso('Mandei para ${membro.nome}: $mensagem', acao: 'sendFamilyMessage');
+      return MollyToolResult.sucesso(
+        enviado
+            ? 'Mandei para ${membro.nome}: $mensagem'
+            : 'Estou sem internet agora. Mando para ${membro.nome} assim que ela voltar: $mensagem',
+        acao: 'sendFamilyMessage',
+      );
     } catch (_) {
       return MollyToolResult.falha('Não consegui enviar a mensagem agora.', acao: 'sendFamilyMessage');
     }
@@ -80,15 +84,22 @@ class FamilyTool {
 
   static Future<MollyToolResult> _callFamilyMember(Map<String, dynamic> p) async {
     final nomeFamiliar = (p['nomeFamiliar'] as String).trim();
-    final resolucao = resolverFamiliar(await FamilyService.stream().first, nomeFamiliar);
+    final resolucao = resolverFamiliar(await MollyCache.familiares(), nomeFamiliar);
     final membro = resolucao.membro;
     if (membro == null) {
       return MollyToolResult.falha(resolucao.falaProblema!, acao: 'callFamilyMember');
     }
     try {
-      final meuNome = await ProfileService.getNameForSelectedProfile() ?? 'Familiar';
-      await ChatService.send(membro.uid, '📞 $meuNome pediu para você ligar para ele(a).');
-      return MollyToolResult.sucesso('Avisei ${membro.nome} para te ligar.', acao: 'callFamilyMember');
+      final meuNome = await MollyCache.nome() ?? 'Familiar';
+      final enviado = await MollyCache.escrever(
+          () => ChatService.send(membro.uid, '📞 $meuNome pediu para você ligar para ele(a).'));
+      return MollyToolResult.sucesso(
+        enviado
+            ? 'Avisei ${membro.nome} para te ligar.'
+            : 'Estou sem internet agora. Aviso ${membro.nome} assim que ela voltar. '
+                'Se for urgente, diga socorro.',
+        acao: 'callFamilyMember',
+      );
     } catch (_) {
       return MollyToolResult.falha('Não consegui avisar ${membro.nome} agora.', acao: 'callFamilyMember');
     }
@@ -102,7 +113,7 @@ class FamilyTool {
     risco: MollyRiskLevel.low,
     parametros: const [],
     executar: (_) async {
-      final membros = await FamilyService.stream().first;
+      final membros = await MollyCache.familiares();
       return MollyToolResult.sucesso(falaQuemAcompanha(membros), acao: 'getCaregivers');
     },
   );
@@ -128,7 +139,7 @@ class FamilyTool {
 
   /// [resolverFamiliar] sobre os familiares vinculados de verdade.
   static Future<ResolucaoFamiliar> resolver(String alvo) async =>
-      resolverFamiliar(await FamilyService.stream().first, alvo);
+      resolverFamiliar(await MollyCache.familiares(), alvo);
 
   /// Acha o familiar que o usuário quis dizer — puro e testável.
   ///

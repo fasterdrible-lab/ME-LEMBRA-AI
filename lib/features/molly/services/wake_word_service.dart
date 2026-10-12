@@ -40,9 +40,12 @@ enum WakeWordState { idle, listening, detected, unavailable, error }
 ///    em uso — um app "sempre ouvindo" deixaria esse indicador
 ///    permanentemente aceso, o que pode preocupar o usuário idoso (achar
 ///    que algo está errado) mesmo sendo um comportamento esperado.
-/// 5. **Licenciamento**: Picovoice tem tier gratuito (uso pessoal/poucos
-///    dispositivos ativos); uso comercial em escala pede licença paga —
-///    a avaliar se/quando o app crescer além de uso familiar.
+/// 5. **Licenciamento**: Picovoice tinha tier gratuito; segundo relatos de
+///    out/2026 ele foi encerrado em 30/06/2026, sem plano não comercial
+///    (não confirmado na página oficial) — na prática, só licença paga.
+///    Sessão 26: o Vosk (grátis) também foi descartado — "molly" não existe
+///    no vocabulário do modelo em português. Alternativas e restrições em
+///    `docs/MOLLY_VOZ_LEVANTAMENTO.md`.
 ///
 /// Por tudo isso — e pela orientação explícita do próprio prompt mestre
 /// ("não integrar imediatamente no núcleo se houver impacto

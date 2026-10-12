@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../services/notification_service.dart';
+import '../../../services/profile_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/voice_service.dart';
 
@@ -32,6 +33,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
   bool _companhia = false;
   bool _avisos = true;
   bool _briefing = true;
+  bool _avisarFamilia = false;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
       SettingsService.getMollyModoCompanhia(),
       SettingsService.getMollyAvisosProativos(),
       SettingsService.getBriefingDiario(),
+      SettingsService.getAvisarFamiliaRemedio(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -58,6 +61,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
       _companhia = valores[4];
       _avisos = valores[5];
       _briefing = valores[6];
+      _avisarFamilia = valores[7];
       _carregando = false;
     });
   }
@@ -185,6 +189,18 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
                       SettingsService.setMollyAvisosProativos(v);
                       // Desligou: some com as perguntas já agendadas.
                       if (!v) NotificationService.cancelarAcompanhamentosDeRemedio();
+                    },
+                  ),
+                  const Divider(height: 1),
+                  _interruptor(
+                    titulo: 'Avisar minha família sobre o remédio',
+                    ligado: 'Se o remédio não for confirmado em 1 hora, quem acompanha seus lembretes recebe um aviso.',
+                    desligado: 'Sua família não recebe aviso quando o remédio não é confirmado.',
+                    valor: _avisarFamilia,
+                    aoMudar: (v) {
+                      setState(() => _avisarFamilia = v);
+                      SettingsService.setAvisarFamiliaRemedio(v);
+                      ProfileService.setAvisarFamiliaRemedio(v);
                     },
                   ),
                   const Divider(height: 1),

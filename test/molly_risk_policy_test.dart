@@ -23,17 +23,18 @@ void main() {
 
     test('ferramenta CRITICAL com emergência autorizada não pede confirmação (chega a tentar executar)', () async {
       // "Chega a tentar executar" e não "executa com sucesso": sem
-      // FirebaseAuth inicializado, a chamada real de callFamilyMember
-      // lança — o que já prova que o portão de confirmação foi
-      // corretamente pulado (senão o erro seria outro/nenhum).
-      await expectLater(
-        MollyRiskPolicy.executar(
-          'callFamilyMember',
-          {'nomeFamiliar': 'Ana'},
-          emergenciaAutorizada: true,
-        ),
-        throwsA(anything),
+      // Firebase nos testes, a leitura de familiares (MollyCache, TAREFA 26)
+      // devolve lista vazia em vez de lançar — a ferramenta real roda e
+      // responde "nenhum familiar vinculado", o que prova que o portão de
+      // confirmação foi pulado.
+      final resultado = await MollyRiskPolicy.executar(
+        'callFamilyMember',
+        {'nomeFamiliar': 'Ana'},
+        emergenciaAutorizada: true,
       );
+      expect(resultado.precisaConfirmacao, isFalse);
+      expect(resultado.acao, 'callFamilyMember');
+      expect(resultado.fala, contains('nenhum familiar'));
     });
 
     test('ferramenta MEDIUM com ambiguidade pede confirmação, sem executar', () async {

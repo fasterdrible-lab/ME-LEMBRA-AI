@@ -135,6 +135,18 @@ class FamilyService {
             .toList());
   }
 
+  /// Vínculos só da cópia do aparelho, sem rede (cache da Molly, TAREFA 26).
+  static Future<List<FamilyMember>> listarDoAparelho() async {
+    final user = _user;
+    if (user == null) return const [];
+    final qs = await _db
+        .collection('users')
+        .doc(user.uid)
+        .collection('family')
+        .get(const GetOptions(source: Source.cache));
+    return qs.docs.map((d) => FamilyMember.fromMap(d.id, d.data())).toList();
+  }
+
   /// Lista apenas os monitorados (idosos/crianças sob cuidado do atual).
   static Stream<List<FamilyMember>> streamMonitored() {
     return stream().map(

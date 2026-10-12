@@ -70,6 +70,15 @@ class ShortTermMemory {
     }
   }
 
+  /// Entra em coleta de dia/hora a partir de [fala] — o pedido de lembrete
+  /// em si, que vira a origem do título. Não usa [primeiraFala] da
+  /// conversa: se o pedido veio no 2º turno ("que horas são?" → "me lembra
+  /// do remédio"), o título sairia da pergunta errada.
+  void iniciarColetaDeLembrete(String fala) {
+    coletandoLembrete = true;
+    _primeiraFala = fala;
+  }
+
   /// Conta mais um turno da conversa — chamar uma vez por fala do
   /// usuário processada (não por sub-turno de confirmação de risco, que
   /// faz parte de resolver o mesmo pedido).

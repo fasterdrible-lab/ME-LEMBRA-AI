@@ -1140,6 +1140,139 @@ pré-existentes. Sem mudança no backend — nada pra implantar na VPS.
 
 ---
 
+## Sessão 26 — Cache da Molly, TAREFA 26 do prompt mestre (2026-10-12)
+
+**Achado antes de escrever código:** o Firestore já guarda no aparelho
+uma cópia do que leu e das escritas pendentes, então um cache novo que
+duplicasse os dados seria redundante (e ficaria desatualizado em relação
+às escritas offline). O que faltava era a Molly *usar* essa cópia sem
+travar:
+
+1. Leitura: com Wi-Fi conectado sem internet de verdade, `get()` espera
+   ~10 s antes de cair no cache; `MollyContextService.montar()` fazia
+   várias leituras em sequência a cada turno.
+2. Escrita: `await add()/update()` só completa quando o servidor confirma
+   — sem internet nunca completa, e a Molly ficava em "Pensando..." para
+   sempre ao confirmar remédio, criar lembrete, adicionar à lista de
+   compras ou mandar mensagem à família.
+
+`MollyCache` resolve os dois: leitura com prazo de 3 s → `Source.cache`
+→ vazio (nunca lança), com 30 s de "sem rede" depois de um estouro;
+escrita com prazo de 3 s → `false` = pendente, a fala avisa ("Estou sem
+internet agora; aviso sua família quando ela voltar"). Perfil/nome
+ganharam cópia em SharedPreferences porque o nome do Firestore nunca era
+salvo localmente. Contexto lido em paralelo.
+
+Limitação registrada: `ReminderService.confirm` cancela a notificação
+"Você conseguiu tomar?" e avisa a família só DEPOIS da escrita — sem
+internet, isso espera a conexão voltar. Não mexido (serviço usado pelo
+app inteiro).
+
+`molly_risk_policy_test.dart` dependia de `callFamilyMember` lançar
+exceção sem Firebase; agora a leitura devolve lista vazia, então o teste
+confere a resposta real ("nenhum familiar vinculado"). Novo
+`test/molly_cache_service_test.dart` (9 testes puros). `flutter analyze`
+limpo no módulo; `flutter test` 164/6 (as 6 de sempre). Aparelho
+desconectado — não instalado.
+
+### Parte 2 — TAREFA 32 (provedor de IA) com DeepSeek de reserva
+
+Usuário perguntou sobre rodar Llama próprio para não gastar tokens.
+Explicado: a Groq hoje é grátis (o problema é o limite por minuto, não
+custo); Llama no Galaxy A07 seria lento (10–30 s) e erraria horário;
+"aprender sozinho" exigiria treino com GPU e conversas dos idosos. O
+usuário escolheu o DeepSeek como reserva (mais barato depois da Groq).
+
+Abstração no **backend** (`providers.py`), não no app: chave não vai no
+APK e trocar de provedor não exige APK novo. Groq continua primeiro
+(grátis); DeepSeek só quando todos os modelos da Groq falharem, e só se
+`DEEPSEEK_API_KEY` estiver no `.env`. `httpx` (já instalado com a Groq)
+em vez do SDK da OpenAI — nenhuma dependência nova. `ComandoAction.from_raw`
+continua dentro da tentativa (resposta inválida → próximo provedor, igual
+antes). `test_providers.py`: 12/12, sem rede. Não implantado ainda.
+
+### Parte 3 — Criar lembrete sem IA
+
+Extra combinado com o usuário (continuação das TAREFAs 17/31): o pedido
+mais comum da Molly dependia da Groq. `interpretarPedido` é conservador
+de propósito — gatilho no começo da frase, assunto obrigatório, e
+qualquer sinal de frase relativa ("antes", "depois", "quando", "semana
+que vem") manda para a IA. Um lembrete errado (horário trocado) é pior
+que um "estou sem internet".
+
+Ao escrever os testes, apareceram problemas reais no parser que já
+existia (portado do `elderly_screen.dart`): "às quatro" virava 4h da
+madrugada; " para a "/" as " cortavam o título ("ligar para a Ana" →
+"ligar"); "depois de amanhã" virava amanhã; "tomar banho" virava Remédio
+(e ganharia o aviso de remédio); e o título vinha da 1ª fala da conversa,
+não do pedido. Todos corrigidos com teste. Regra nova de período: 1–5 h
+sem "da manhã"/"madrugada" = tarde — a confirmação fala o horário, dá pra
+corrigir. 181/6. Aparelho desconectado — não instalado.
+
+### Parte 4 — Fase 1: conversa por texto
+
+Campo "Ou escreva aqui" no `MollyAssistantPanel`. O difícil não era o
+campo, eram as perguntas de acompanhamento: cinco lugares abriam o
+microfone sozinhos para ouvir a resposta. Unificados em
+`_esperarResposta` (script Python para mover os blocos sem mexer no
+corpo): com a última entrada digitada, a resposta vem pelo campo.
+Decisões: pergunta pendente vale 2 min (confirmação CRITICAL esquecida não
+pode ser "respondida" por um pedido novo); número por escuta para
+descartar resultado atrasado do `speech_to_text` depois de `stop()`;
+SOCORRO checado no texto antes de tudo. Atalho com teclado aberto:
+microfone 72 px e só a mensagem rola, SOS sempre visível. Teste de ponta
+a ponta com "que horas são" digitado (offline, sem Firebase). 184/6.
+Não instalado; layout com teclado não visto no aparelho.
+
+### Parte 5 — TAREFA 21: avisar a família sobre o remédio
+
+Ao planejar, achado que o app não sabia se o remédio DIÁRIO foi tomado
+hoje: `dateTime` de lembrete repetido é a primeira ocorrência (nada o
+avança) e `confirmed` é global. Todos os recursos de remédio da Molly (e
+"meus lembretes de hoje", briefing, lista "Hoje") filtravam por data
+exata — um remédio "todo dia às 8h" sumia a partir do 2º dia. A tela de
+histórico já tinha a regra de ocorrência (`_occursOn`); levada para o
+modelo (`Reminder.ocorreEm`) e usada nos 6 pontos. Confirmação por dia em
+`confirmedDates` (arrayUnion, fora do `toFirestore`).
+
+Usuário escolheu servidor (funciona com o celular do idoso desligado —
+justamente quando a família mais precisa) e 1 hora. Serviço novo e
+separado do SOS na VPS; regras puras espelhando as do app, testadas sem
+Firebase. Opt-in do próprio idoso, padrão desligado. Não implantado.
+
+### Parte 6 — TAREFA 27: telemetria
+
+Firebase Analytics (escolha do usuário). Cuidados: o `pub add` sozinho
+escolheu a 11.0.0, que rebaixava 15 pacotes Firebase — fixado em ^11.6.0
+(nenhuma outra versão muda). O filtro de parâmetros começou como "só
+identificador curto", mas um nome como "Ana" passaria; trocado por lista
+fechada de valores por parâmetro. O manifesto empacotado mostrou que o
+SDK acrescenta `AD_ID` e duas permissões `ACCESS_ADSERVICES_*` — as três
+removidas e conferidas no APK. 199/6, build debug OK. Não instalado.
+
+### Parte 7 — Levantamento de voz (Vosk, wake word, interrupção)
+
+Usuário perguntou sobre o Vosk. Teste concreto: baixado o modelo
+`vosk-model-small-pt-0.3` e extraída a tabela de palavras embutida no
+`Gr.fst` (~100 mil): "molly" não existe (só "mole"/"mali") — Vosk não
+serve para a wake word sem recompilar o modelo. Picovoice: relatos de fim
+do plano grátis em 30/06/2026 (o comentário de `wake_word_service.dart`
+ficou desatualizado). Interromper a Molly: `record` já tem
+`VOICE_COMMUNICATION` + `AcousticEchoCanceler` + streaming; risco é o eco
+do TTS (tocado como mídia) não ser cancelado no A07. Recomendado:
+interromper por toque primeiro. Tudo em `docs/MOLLY_VOZ_LEVANTAMENTO.md`.
+
+### Parte 8 — Interromper a Molly por toque (MOLLY-40)
+
+O cuidado foi não abrir duas escutas: o fluxo cortado continua depois do
+`stop()` (confirmado no plugin: a espera da fala termina) e às vezes ele
+mesmo abre o microfone. Flag `_ouvirDepoisDeInterromper`: desligada por
+`_esperarResposta` (o fluxo vai ouvir) e pela contagem de emergência;
+senão o toque abre a escuta em 0,4 s. Sem teste automatizado (o estado
+"falando" depende do TTS, sem mock). Precisa de teste no aparelho.
+
+---
+
 ## Regra de ouro para este projeto
 
 > NUNCA escrever emojis diretamente em arquivos .dart via PowerShell.

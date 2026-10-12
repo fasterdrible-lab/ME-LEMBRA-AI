@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-10-11 (sessão 25)
+> Última atualização: 2026-10-12 (sessão 26)
 
 ---
 
@@ -92,7 +92,8 @@
   "nome": "string",
   "inviteCode": "string (6 chars)",
   "fcmToken": "string",
-  "fcmUpdatedAt": "timestamp"
+  "fcmUpdatedAt": "timestamp",
+  "avisarFamiliaRemedio": "bool (sessão 26 — opt-in, lido por server/remedio_notifier.py)"
 }
 ```
 
@@ -145,7 +146,8 @@ gravar sem `userApproved: true` explícito **e** sem
 > `cfg_molly_ativa` (true), `cfg_molly_resposta_voz` (true), `cfg_voz_lenta`
 > (false), `cfg_molly_modo_companhia` (false — enviado ao backend em
 > `contexto.modo_companhia`), `cfg_molly_avisos_proativos` (true),
-> `cfg_briefing_diario` (true).
+> `cfg_briefing_diario` (true), `cfg_avisar_familia_remedio` (false — cópia
+> local; quem vale é `users/{uid}.avisarFamiliaRemedio`, sessão 26).
 
 ### `users/{uid}/family/{otherUid}`
 ```json
@@ -171,9 +173,18 @@ gravar sem `userApproved: true` explícito **e** sem
   "repeat": "unico | diario | semanal",
   "notification": "string",
   "perfil": "string",
-  "confirmed": "bool"
+  "confirmed": "bool",
+  "confirmedDates": "[\"2026-10-12\", ...] (sessão 26)"
 }
 ```
+> **Sessão 26 — confirmação por dia:** `confirmed` é um só para sempre;
+> num lembrete diário/semanal não diz se a dose de HOJE foi tomada.
+> `ReminderService.confirm` também grava o dia em `confirmedDates`
+> (`arrayUnion`) — campo fora de `Reminder.toFirestore()` de propósito,
+> pra editar o lembrete não apagar as confirmações. Regras em
+> `Reminder.ocorreEm`/`horarioEm`/`confirmadoEm` (o `dateTime` de um
+> lembrete repetido é só a primeira vez; nada o avança), espelhadas em
+> `server/remedio_notifier.py`.
 
 ### `invites/{code}`
 ```json
@@ -505,6 +516,7 @@ ReminderService.stream() emite lista de lembretes
 | `FOREGROUND_SERVICE_LOCATION` | Foreground Service com localização |
 | `FOREGROUND_SERVICE_HEALTH` | Tipo `health` do SosProtectionService (sessão 25; antes `dataSync`, que tem teto de 6h/24h no Android 15+) |
 | `HIGH_SAMPLING_RATE_SENSORS` | Pré-requisito do Android 14+ para iniciar FGS `health` (concedida na instalação) |
+| ~~`AD_ID`, `ACCESS_ADSERVICES_AD_ID`, `ACCESS_ADSERVICES_ATTRIBUTION`~~ | **Removidas** (`tools:node="remove"`, sessão 26): o SDK do Firebase Analytics as acrescenta; o app não tem anúncios |
 
 ---
 
@@ -596,7 +608,10 @@ lib/
                                       # de elderly_screen.dart
                                       # (abrirComoAtalho — autoIniciar:
                                       # true, já começa a ouvir sozinho,
-                                      # sem navegar de tela)
+                                      # sem navegar de tela). Sessão 26:
+                                      # campo "Ou escreva aqui" — conversa
+                                      # por texto (Fase 1), mesmo caminho
+                                      # da voz
         listening_indicator.dart     # "Estou ouvindo"/"Pensando"/"Falando"
       memory/
         short_term_memory.dart       # ShortTermMemory (TAREFA 7) — histórico
@@ -631,7 +646,10 @@ lib/
                                       # inferirTipo/inferirRecorrencia,
                                       # portados de elderly_screen.dart pra
                                       # a coleta de dia/hora funcionar de
-                                      # verdade na Molly nova
+                                      # verdade na Molly nova. Sessão 26:
+                                      # interpretarPedido() — "me lembra do
+                                      # remédio às oito" sem IA (horas por
+                                      # extenso, daqui a X min, dia da semana)
         molly_proactive_service.dart # MollyProactiveService (sessão 24,
                                       # Fase 8; sessão 25, TAREFA 23) —
                                       # remédio atrasado ≥15 min: "Você
@@ -656,6 +674,15 @@ lib/
                                       # mensagem pro…", "quem acompanha meus
                                       # lembretes?" — puro, chamado pelo
                                       # OfflineIntentService
+        molly_cache_service.dart     # MollyCache (sessão 26, TAREFA 26) —
+                                      # leitura com prazo de 3 s → cópia do
+                                      # Firestore no aparelho; escrita que
+                                      # não trava sem internet (fica
+                                      # pendente e sobe quando voltar)
+        molly_telemetria.dart        # MollyTelemetria (sessão 26, TAREFA
+                                      # 27) — Firebase Analytics, eventos
+                                      # sem conteúdo (lista fechada de
+                                      # valores); debug não envia
         molly_tool_registry.dart     # catálogo de ferramentas (TAREFA 3)
         molly_risk_policy.dart       # LOW roda direto; MEDIUM roda direto
                                       # exceto se ambíguo; CRITICAL sempre
@@ -753,10 +780,21 @@ android/
 
 server/
   sos_notifier.py                    # VPS: escuta Firestore → envia FCM push
+  remedio_notifier.py                # sessão 26 (TAREFA 21): VPS, a cada 5 min —
+                                      # remédio sem confirmação há 1h → chat +
+                                      # FCM aos cuidadores (só quem ligou
+                                      # avisarFamiliaRemedio). Serviço separado
+                                      # do SOS, mesma pasta/venv na VPS
+  remedio-notifier.service           # unit systemd
+  test_remedio_notifier.py           # 15 testes das regras, sem Firebase
   requirements.txt                   # firebase-admin
   sos-notifier.service               # unit systemd
   ai_command_server/                 # VPS: backend do comando de voz por IA
-    app.py                           # Flask: POST /interpretar-comando (Groq)
+    app.py                           # Flask: POST /interpretar-comando
+    providers.py                     # sessão 26 (TAREFA 32): AiProvider —
+                                      # Groq (modelos em ordem) e DeepSeek
+                                      # de reserva paga, se houver chave
+    test_providers.py                # 12 testes, sem rede (unittest)
     internet.py                      # sessão 25: previsão (Open-Meteo) e
                                       # manchetes (Agência Brasil, RSS) —
                                       # só quando a frase pede, com cache
@@ -782,6 +820,7 @@ test/
   molly_reminder_parser_test.dart    # 13 testes da coleta de dia/hora (sessão 24), 100% puro Dart
   molly_memory_gatilho_test.dart     # 6 testes do gatilho de memória (sessão 24), 100% puro Dart
   molly_proactive_service_test.dart  # 8 testes da proatividade (sessão 24), 100% puro Dart
+  molly_cache_service_test.dart      # 9 testes do cache (TAREFA 26), 100% puro Dart
   support/
     firebase_core_mocks.dart         # mocks do Firebase Core p/ testes de widget
 
@@ -795,6 +834,8 @@ docs/
   MOLLY_SAFETY.md                    # SOS, saúde, ações, privacidade
   MOLLY_TESTING.md                   # como testar (app e backend)
   MOLLY_ACCESSIBILITY_CHECKLIST.md   # checklist 60+ e roteiro com idosos
+  MOLLY_VOZ_LEVANTAMENTO.md          # sessão 26: Vosk/wake word "Molly",
+                                      # interromper a Molly, LiveKit
   MOLLY_ARCHITECTURE_ANALYSIS.md     # auditoria original (sessão 23)
 ```
 

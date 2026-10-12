@@ -1,5 +1,5 @@
 import '../../../models/reminder.dart';
-import '../../../services/reminder_service.dart';
+import 'molly_cache_service.dart';
 import '../models/molly_tool_result.dart';
 import '../tools/molly_fala_utils.dart';
 
@@ -40,7 +40,7 @@ class MollyMedicationService {
   static Future<MollyToolResult> responderRemediosDeHoje() async {
     List<Reminder> todos;
     try {
-      todos = await ReminderService.getAll();
+      todos = await MollyCache.lembretes();
     } catch (_) {
       return MollyToolResult.falha(
         'Não consegui ver seus remédios agora.',
@@ -56,32 +56,29 @@ class MollyMedicationService {
   /// Pura e testável. Resume os remédios de hoje: quantos foram marcados
   /// como tomados e qual é o próximo/pendente (respostas curtas, TAREFA 12).
   static String falaRemediosDeHoje(List<Reminder> todos, DateTime agora) {
-    final hoje = todos
-        .where((r) =>
-            _ehRemedio(r.type) &&
-            r.dateTime.year == agora.year &&
-            r.dateTime.month == agora.month &&
-            r.dateTime.day == agora.day)
-        .toList()
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    // Sessão 26: ocorreEm/confirmadoEm — inclui remédio diário criado em
+    // outro dia, e "tomado" é só o que foi confirmado HOJE.
+    final hoje = todos.where((r) => _ehRemedio(r.type) && r.ocorreEm(agora)).toList()
+      ..sort((a, b) => a.horarioEm(agora).compareTo(b.horarioEm(agora)));
 
     if (hoje.isEmpty) {
       return 'Não encontrei nenhum remédio marcado para hoje.';
     }
-    final tomados = hoje.where((r) => r.confirmed).toList();
-    final pendentes = hoje.where((r) => !r.confirmed).toList();
+    final tomados = hoje.where((r) => r.confirmadoEm(agora)).toList();
+    final pendentes = hoje.where((r) => !r.confirmadoEm(agora)).toList();
 
     if (pendentes.isEmpty) {
       return hoje.length == 1
-          ? 'Sim. Seu remédio das ${horaFalada(hoje.first.dateTime)} já foi marcado como tomado.'
+          ? 'Sim. Seu remédio das ${horaFalada(hoje.first.horarioEm(agora))} já foi marcado como tomado.'
           : 'Sim. Os ${hoje.length} remédios de hoje já foram marcados como tomados.';
     }
 
     final proximo = pendentes.first;
-    final atrasado = proximo.dateTime.isBefore(agora);
+    final horario = proximo.horarioEm(agora);
+    final atrasado = horario.isBefore(agora);
     final pendenteFrase = atrasado
-        ? 'O das ${horaFalada(proximo.dateTime)} ainda não foi marcado como tomado.'
-        : 'O próximo é às ${horaFalada(proximo.dateTime)}.';
+        ? 'O das ${horaFalada(horario)} ainda não foi marcado como tomado.'
+        : 'O próximo é às ${horaFalada(horario)}.';
 
     if (tomados.isEmpty) {
       final qtd = hoje.length == 1 ? 'Você tem 1 remédio hoje' : 'Você tem ${hoje.length} remédios hoje';

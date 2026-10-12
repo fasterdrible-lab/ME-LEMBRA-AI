@@ -179,13 +179,10 @@ class MollyVoiceService {
     }
   }
 
-  /// Interrompe a fala em andamento. Serve como primitiva para um futuro
-  /// "voltar a falar interrompe a MOLLY" (barge-in) — esta classe não
-  /// implementa detecção automática disso: ouvir e falar ao mesmo tempo
-  /// de verdade (sem eco pegando a própria fala da MOLLY) é o problema que
-  /// a TAREFA 33 do prompt mestre (voz em tempo real via LiveKit) resolve
-  /// de forma adequada; forçar isso aqui em cima do `speech_to_text`
-  /// clássico seria um comportamento novo, não validado em campo.
+  /// Interrompe a fala em andamento. Sessão 26: usada quando a pessoa toca o
+  /// microfone com a Molly falando (`MollyAssistantPanel._interromperMolly`).
+  /// Interromper pela VOZ, sem toque, exige ouvir com o eco da própria
+  /// Molly cancelado — não implementado; ver `docs/MOLLY_VOZ_LEVANTAMENTO.md`.
   void interromperFala() {
     VoiceService.stop();
     if (!_descartado && estado.value == MollyVoiceState.speaking) {

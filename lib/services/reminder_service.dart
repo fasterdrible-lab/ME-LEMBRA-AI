@@ -40,6 +40,13 @@ class ReminderService {
     return snap.docs.map(Reminder.fromFirestore).toList();
   }
 
+  // Buscar todos só da cópia do aparelho, sem rede (cache da Molly, TAREFA 26)
+  static Future<List<Reminder>> getAllDoAparelho() async {
+    if (_userId == null) return [];
+    final snap = await _col.orderBy('dateTime').get(const GetOptions(source: Source.cache));
+    return snap.docs.map(Reminder.fromFirestore).toList();
+  }
+
   // Deletar
   static Future<void> delete(String id, {int? notificationId}) async {
     if (_userId == null) return;
@@ -60,7 +67,12 @@ class ReminderService {
       if (doc.exists) reminderData = doc.data();
     } catch (_) {}
 
-    await _col.doc(id).update({'confirmed': true});
+    // confirmedDates: confirmação POR DIA (lembrete diário/semanal) — é o
+    // que a Molly e o aviso à família (server/remedio_notifier.py) leem.
+    await _col.doc(id).update({
+      'confirmed': true,
+      'confirmedDates': FieldValue.arrayUnion([Reminder.chaveDia(DateTime.now())]),
+    });
 
     // TAREFA 23: remédio confirmado — some com "Você conseguiu tomar?" e
     // com os "lembra de novo" pendentes (sem notificação à toa).

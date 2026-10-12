@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,6 +21,7 @@ import 'features/maps/map_screen.dart';
 import 'features/molly/screens/molly_memory_screen.dart';
 import 'features/molly/screens/molly_screen.dart';
 import 'features/molly/screens/molly_settings_screen.dart';
+import 'features/molly/services/molly_telemetria.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'config_screen.dart';
 import 'history_screen.dart';
@@ -59,6 +62,8 @@ void main() async {
   } catch (_) {
     // Firebase já inicializado pelo google-services.json nativo
   }
+  // TAREFA 27: telemetria da Molly — build de desenvolvimento não coleta.
+  unawaited(MollyTelemetria.iniciar());
   await NotificationService.init();
   final prefs = await SharedPreferences.getInstance();
   _onboardingVisto = prefs.getBool('onboarding_visto') ?? false;

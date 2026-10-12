@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:me_lembra_ai/features/molly/screens/molly_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/firebase_core_mocks.dart';
 
@@ -49,6 +50,52 @@ void main() {
       await tester.pump();
 
       expect(find.text('Hoje'), findsOneWidget);
+    });
+  });
+
+  // Fase 1 do prompt mestre (sessão 26): conversar também por texto.
+  group('MollyScreen — conversa por texto', () {
+    setUp(() {
+      // Sem fala (TTS não tem mock) e sem aviso de remédio ao abrir.
+      SharedPreferences.setMockInitialValues({
+        'cfg_molly_resposta_voz': false,
+        'cfg_molly_avisos_proativos': false,
+      });
+    });
+
+    testWidgets('campo "Ou escreva aqui" e botao Enviar presentes, com o microfone', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'Ou escreva aqui'), findsOneWidget);
+      expect(find.bySemanticsLabel('Enviar para a Molly'), findsOneWidget);
+      expect(find.bySemanticsLabel('Falar com a Molly'), findsOneWidget);
+    });
+
+    testWidgets('texto digitado passa pelo mesmo caminho da voz ("que horas sao", sem IA)', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'que horas são');
+      await tester.tap(find.bySemanticsLabel('Enviar para a Molly'));
+      // Leituras do contexto têm prazo (MollyCache) — avança o relógio.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      expect(find.textContaining('Agora são'), findsOneWidget);
+      // O campo é limpo depois de enviar.
+      expect(find.text('que horas são'), findsNothing);
+    });
+
+    testWidgets('enviar com o campo vazio nao faz nada', (tester) async {
+      await tester.pumpWidget(buildSubject());
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel('Enviar para a Molly'));
+      await tester.pump();
+
+      expect(find.text('Como posso ajudar?'), findsOneWidget);
     });
   });
 }

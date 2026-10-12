@@ -1,5 +1,5 @@
 import '../../../models/reminder.dart';
-import '../../../services/reminder_service.dart';
+import 'molly_cache_service.dart';
 import '../tools/molly_fala_utils.dart';
 
 /// Briefing matinal inteligente da MOLLY (TAREFA 13 do prompt mestre).
@@ -52,14 +52,10 @@ class MollyBriefingService {
   static Future<List<Reminder>> _lembretesDeHoje() async {
     try {
       final agora = DateTime.now();
-      final todos = await ReminderService.getAll();
-      return todos
-          .where((r) =>
-              r.dateTime.year == agora.year &&
-              r.dateTime.month == agora.month &&
-              r.dateTime.day == agora.day)
-          .toList()
-        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      final todos = await MollyCache.lembretes();
+      // Sessão 26: ocorreEm — inclui os diários/semanais criados em outro dia.
+      return todos.where((r) => r.ocorreEm(agora)).toList()
+        ..sort((a, b) => a.horarioEm(agora).compareTo(b.horarioEm(agora)));
     } catch (_) {
       return const [];
     }

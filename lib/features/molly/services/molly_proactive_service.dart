@@ -2,7 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../models/reminder.dart';
 import '../../../services/notification_service.dart';
-import '../../../services/reminder_service.dart';
+import 'molly_cache_service.dart';
 import '../tools/molly_fala_utils.dart';
 
 /// Um remédio atrasado e a pergunta pronta pra fazer sobre ele.
@@ -40,7 +40,7 @@ class MollyProactiveService {
   static Future<AvisoRemedio?> verificarRemedioAtrasado({DateTime? agora}) async {
     List<Reminder> todos;
     try {
-      todos = await ReminderService.getAll();
+      todos = await MollyCache.lembretes();
     } catch (_) {
       return null;
     }
@@ -51,21 +51,20 @@ class MollyProactiveService {
   /// menos [atrasoMinimo]. Pura, testável.
   static AvisoRemedio? gerarAviso(List<Reminder> todos, {DateTime? agora}) {
     final ref = agora ?? DateTime.now();
+    // Sessão 26: ocorreEm/confirmadoEm — remédio diário criado em outro dia
+    // e confirmado ontem também conta (antes só valia o do dia da criação).
     final atrasados = todos.where((r) {
       if (r.type != 'Remedio' && r.type != 'Remédio' && r.type != 'Tomar') return false;
-      if (r.confirmed) return false;
-      if (r.dateTime.year != ref.year || r.dateTime.month != ref.month || r.dateTime.day != ref.day) {
-        return false;
-      }
-      return ref.difference(r.dateTime) >= atrasoMinimo;
+      if (!r.ocorreEm(ref) || r.confirmadoEm(ref)) return false;
+      return ref.difference(r.horarioEm(ref)) >= atrasoMinimo;
     }).toList()
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+      ..sort((a, b) => a.horarioEm(ref).compareTo(b.horarioEm(ref)));
 
     if (atrasados.isEmpty) return null;
 
     final primeiro = atrasados.first;
     final nome = primeiro.title.trim().isNotEmpty ? primeiro.title.trim() : 'seu remédio';
-    final hora = horaFalada(primeiro.dateTime);
+    final hora = horaFalada(primeiro.horarioEm(ref));
     final pergunta = atrasados.length == 1
         ? 'Você conseguiu tomar $nome, das $hora?'
         : 'Você tem ${atrasados.length} remédios sem confirmar hoje. Conseguiu tomar $nome, das $hora?';

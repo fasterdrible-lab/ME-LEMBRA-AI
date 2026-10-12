@@ -30,6 +30,15 @@ void main() {
       expect(memoria.primeiraFala, isNull);
     });
 
+    test('pedido de lembrete no 2o turno vira a origem do titulo, nao a 1a fala', () {
+      final memoria = ShortTermMemory()
+        ..registrarPrimeiraFalaSeNecessario('que horas sao')
+        ..registrarTroca('que horas sao', 'Agora sao nove horas.')
+        ..iniciarColetaDeLembrete('me lembra do remedio');
+      expect(memoria.coletandoLembrete, isTrue);
+      expect(memoria.primeiraFala, 'me lembra do remedio');
+    });
+
     test('historico para IA respeita o limite de trocas, descartando as mais antigas', () {
       final memoria = ShortTermMemory();
       for (var i = 0; i < ShortTermMemory.maxTrocas + 2; i++) {

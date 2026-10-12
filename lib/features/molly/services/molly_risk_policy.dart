@@ -1,5 +1,6 @@
 import '../models/molly_risk_level.dart';
 import '../models/molly_tool_result.dart';
+import 'molly_telemetria.dart';
 import 'molly_tool_registry.dart';
 
 /// Política de confirmação por nível de risco (TAREFA 4 do prompt mestre).
@@ -53,7 +54,22 @@ class MollyRiskPolicy {
       );
     }
 
-    return MollyToolRegistry.executar(nomeFerramenta, parametros);
+    return _executarERegistrar(nomeFerramenta, parametros, confirmada: false);
+  }
+
+  /// TAREFA 27: só o nome da ferramenta e se deu certo — nunca os parâmetros.
+  static Future<MollyToolResult> _executarERegistrar(
+    String nomeFerramenta,
+    Map<String, dynamic> parametros, {
+    required bool confirmada,
+  }) async {
+    final resultado = await MollyToolRegistry.executar(nomeFerramenta, parametros);
+    MollyTelemetria.registrar(MollyEvento.toolExecuted, {
+      'ferramenta': nomeFerramenta,
+      'sucesso': resultado.sucesso,
+      'confirmada': confirmada,
+    });
+    return resultado;
   }
 
   /// Executa a ferramenta [nomeFerramenta] sem checar risco — para o
@@ -65,7 +81,7 @@ class MollyRiskPolicy {
     String nomeFerramenta,
     Map<String, dynamic> parametrosPendentes,
   ) {
-    return MollyToolRegistry.executar(nomeFerramenta, parametrosPendentes);
+    return _executarERegistrar(nomeFerramenta, parametrosPendentes, confirmada: true);
   }
 
   /// Pergunta curta e natural (TAREFA 11/12 do prompt mestre: linguagem

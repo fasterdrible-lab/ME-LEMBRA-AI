@@ -147,6 +147,66 @@ Configurações da Molly:
 ## O que ainda não existe
 
 - Ativação por "Molly" (wake word) — só a abstração (`wake_word_service.dart`).
-- Voz em tempo real / interromper a Molly falando (LiveKit, TAREFA 33).
-- Segundo provedor de IA fora da Groq (TAREFA 32 — os reservas são todos Groq).
-- Cache local de perfil/familiares/lembretes (TAREFA 26) e telemetria (TAREFA 27).
+- Voz em tempo real / interromper a Molly **pela voz** (TAREFA 33 —
+  interromper **por toque** existe desde a sessão 26: tocar o microfone com
+  ela falando corta a fala e abre a escuta; ver
+  `docs/MOLLY_VOZ_LEVANTAMENTO.md`).
+
+## Telemetria (TAREFA 27, sessão 26)
+
+`services/molly_telemetria.dart` (`MollyTelemetria.registrar`) → Firebase
+Analytics. Eventos (enum fechado): `molly_started` (origem tela/atalho),
+`molly_voice_used`, `molly_text_used`, `molly_tool_executed` (ferramenta,
+sucesso, confirmada — registrado em `MollyRiskPolicy`, ponto único),
+`molly_offline_command` (comando), `molly_local_reminder` (criado /
+pergunta_hora), `molly_ai_used` (ação), `molly_safety_block` (tipo),
+`molly_error` (sem_ia, microfone, microfone_indisponivel, nao_ouviu).
+**Nunca conteúdo**: cada parâmetro aceita só valores de uma lista fechada
+(nome do catálogo de ferramentas, enum de comando offline, ações do
+backend, códigos fixos) ou sim/não — frase, remédio e até um nome solto
+como "Ana" são descartados no próprio `MollyTelemetria`. Debug não envia.
+Manifesto: sem ID de publicidade (`google_analytics_adid_collection_enabled`
+false, sem sinais de anúncio personalizado, permissões `AD_ID`/
+`ACCESS_ADSERVICES_*` removidas). O painel do Analytics mostra os dados
+com até 24 h de atraso e só agregados.
+
+## Voz ou texto (Fase 1, sessão 26)
+
+`MollyAssistantPanel` aceita fala e texto digitado ("Ou escreva aqui"):
+os dois entram por `_receberEntrada` → `_processarFala`. Perguntas de
+acompanhamento usam `_esperarResposta`: com a última entrada digitada,
+esperam o texto (pendente por até 2 min) em vez de abrir o microfone. Cada
+escuta tem um número (`_escutaAtual`); digitar descarta resultado atrasado
+do plugin de voz. SOCORRO é checado no texto antes de qualquer coisa e em
+qualquer escuta.
+
+## Provedores de IA (TAREFA 32)
+
+`server/ai_command_server/providers.py`: `AiProvider` (só `send_message`)
+com `GroqProvider` e `DeepSeekProvider`. Ordem: modelos da Groq
+(`GROQ_MODEL` + `GROQ_MODELOS_RESERVA`, grátis com limite por modelo) e,
+se todos falharem, o DeepSeek (pago) — só se `DEEPSEEK_API_KEY` estiver no
+`.env`. A abstração mora no backend, não no app: as chaves não podem ir no
+APK, e trocar de provedor não exige APK novo. `executeTool` não existe de
+propósito (ferramentas rodam no app, via `MollyRiskPolicy`); `streamResponse`
+fica para a voz em tempo real (TAREFA 33). Testes:
+`python -m unittest test_providers` na pasta do backend (sem rede).
+
+## Cache e funcionamento sem internet (TAREFA 26)
+
+`MollyCache` (`services/molly_cache_service.dart`) é o único caminho da
+Molly para lembretes, familiares, perfil e nome. Leitura: rede com prazo de
+3 s → cópia do aparelho (cache do próprio Firestore) → vazio; depois de um
+estouro, 30 s sem tentar a rede. Escrita: espera a confirmação do servidor
+por até 3 s; sem ela, a resposta avisa que está sem internet e o Firestore
+envia sozinho quando a conexão voltar. Sem internet funcionam: SOCORRO,
+meus lembretes, confirmar remédio, que horas são, contato de emergência,
+quem é minha família, mandar mensagem/avisar familiar (enviada depois) e
+criar lembrete ("me lembra do remédio às oito" — `MollyReminderParser.
+interpretarPedido`, sessão 26; frases como "duas horas antes da consulta"
+ainda dependem da IA). O que depende da IA continua respondendo com o
+aviso da TAREFA 25.
+
+Ordem em `MollyAgentService.processar`: comandos offline (SOCORRO
+primeiro) → segurança de saúde → remédios de hoje → **lembrete local** →
+IA.

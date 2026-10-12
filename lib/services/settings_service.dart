@@ -163,6 +163,17 @@ class SettingsService {
   static Future<void> setMollyAvisosProativos(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kMollyAvisosProativos, v);
 
+  /// "Avisar minha família se eu não confirmar o remédio" (TAREFA 21,
+  /// sessão 26). Padrão desligado — a pessoa autoriza. Esta é só a cópia
+  /// local pra tela; quem decide de verdade é o campo
+  /// `users/{uid}.avisarFamiliaRemedio`, lido por `server/remedio_notifier.py`
+  /// (gravado por `ProfileService.setAvisarFamiliaRemedio`).
+  static const _kAvisarFamiliaRemedio = 'cfg_avisar_familia_remedio';
+  static Future<bool> getAvisarFamiliaRemedio() async =>
+      (await SharedPreferences.getInstance()).getBool(_kAvisarFamiliaRemedio) ?? false;
+  static Future<void> setAvisarFamiliaRemedio(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kAvisarFamiliaRemedio, v);
+
   /// Notificação de bom dia às 8h (`NotificationService.scheduleMorningBriefing`).
   static const _kBriefingDiario = 'cfg_briefing_diario';
   static Future<bool> getBriefingDiario() async =>

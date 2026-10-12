@@ -16,6 +16,7 @@ import '../services/offline_intent_service.dart';
 import '../services/molly_proactive_service.dart';
 import '../services/molly_reminder_parser.dart';
 import '../services/molly_risk_policy.dart';
+import '../services/molly_telemetria.dart';
 import '../services/molly_voice_service.dart';
 import '../tools/molly_fala_utils.dart';
 import 'listening_indicator.dart';
@@ -130,6 +131,7 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// usuário perder o começo do que ela ia dizer.
   Future<void> _aoAbrir() async {
     if (!mounted) return;
+    MollyTelemetria.registrar(MollyEvento.started, {'origem': widget.autoIniciar ? 'atalho' : 'tela'});
     // TAREFA 24: "Avisos da Molly" desligado → não avisa remédio atrasado.
     final aviso = await SettingsService.getMollyAvisosProativos()
         ? await MollyProactiveService.verificarRemedioAtrasado()
@@ -151,24 +153,21 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     setState(() => _mensagem = aviso.pergunta);
     await _voz.falar(aviso.pergunta);
     if (!mounted) return;
-    await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: (resposta) async {
-        if (_sosDisparado || !mounted) return;
-        switch (MollyProactiveService.classificarResposta(resposta)) {
-          case RespostaSimNao.sim:
-            setState(() => _mensagem = resposta);
-            _voz.marcarPensando();
-            final r = await MollyRiskPolicy.executar('confirmReminder', {'id': aviso.lembrete.id});
-            await _falarResultado(r.sucesso ? MollyToolResult.sucesso('Ótimo! Marquei como tomado.') : r);
-          case RespostaSimNao.nao:
-            setState(() => _mensagem = resposta);
-            await _oferecerLembrarDeNovo(aviso);
-          case RespostaSimNao.outra:
-            await _processarFala(resposta);
-        }
-      },
-    );
+    await _esperarResposta((resposta) async {
+      if (_sosDisparado || !mounted) return;
+      switch (MollyProactiveService.classificarResposta(resposta)) {
+        case RespostaSimNao.sim:
+          setState(() => _mensagem = resposta);
+          _voz.marcarPensando();
+          final r = await MollyRiskPolicy.executar('confirmReminder', {'id': aviso.lembrete.id});
+          await _falarResultado(r.sucesso ? MollyToolResult.sucesso('Ótimo! Marquei como tomado.') : r);
+        case RespostaSimNao.nao:
+          setState(() => _mensagem = resposta);
+          await _oferecerLembrarDeNovo(aviso);
+        case RespostaSimNao.outra:
+          await _processarFala(resposta);
+      }
+    });
   }
 
   Future<void> _oferecerLembrarDeNovo(AvisoRemedio aviso) async {
@@ -176,45 +175,170 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     setState(() => _mensagem = pergunta);
     await _voz.falar(pergunta);
     if (!mounted) return;
-    await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: (resposta) async {
-        if (_sosDisparado || !mounted) return;
-        if (MollyProactiveService.classificarResposta(resposta) != RespostaSimNao.sim) {
-          await _falarResultado(MollyToolResult.sucesso('Tudo bem.'));
-          return;
-        }
-        final quando = await MollyProactiveService.lembrarDeNovo(aviso.lembrete);
-        await _falarResultado(MollyToolResult.sucesso(quando == null
-            ? 'Já lembrei desse remédio algumas vezes hoje. Se precisar, peça ajuda à sua família.'
-            : 'Combinado. Te lembro às ${horaFalada(quando)}.'));
-      },
-    );
+    await _esperarResposta((resposta) async {
+      if (_sosDisparado || !mounted) return;
+      if (MollyProactiveService.classificarResposta(resposta) != RespostaSimNao.sim) {
+        await _falarResultado(MollyToolResult.sucesso('Tudo bem.'));
+        return;
+      }
+      final quando = await MollyProactiveService.lembrarDeNovo(aviso.lembrete);
+      await _falarResultado(MollyToolResult.sucesso(quando == null
+          ? 'Já lembrei desse remédio algumas vezes hoje. Se precisar, peça ajuda à sua família.'
+          : 'Combinado. Te lembro às ${horaFalada(quando)}.'));
+    });
   }
 
   @override
   void dispose() {
+    _campoTexto.dispose();
     _voz.dispose();
     super.dispose();
   }
 
+  // ── Voz ou texto (Fase 1 do prompt mestre, sessão 26) ───────────────
+
+  final TextEditingController _campoTexto = TextEditingController();
+
+  /// A última fala do usuário foi digitada: as perguntas seguintes da Molly
+  /// ("sim ou não?", "o que você quer dizer para Ana?") esperam o texto em
+  /// vez de abrir o microfone sozinhas — quem digita pode estar num lugar
+  /// barulhento, e o microfone captaria ruído como resposta.
+  bool _ultimaEntradaFoiTexto = false;
+
+  /// Pergunta da Molly esperando resposta digitada (ou por voz, se a pessoa
+  /// tocar o microfone). Vale por [_validadeDaPergunta] — uma confirmação
+  /// esquecida não pode ser "respondida" por um pedido feito muito depois.
+  Future<void> Function(String resposta)? _perguntaPendente;
+  DateTime? _perguntaPendenteDesde;
+  static const _validadeDaPergunta = Duration(minutes: 2);
+
+  /// Cada escuta tem um número; digitar invalida a escuta em andamento. O
+  /// plugin de voz às vezes entrega o resultado depois de `pararEscuta()` —
+  /// sem isso, a fala atrasada seria processada junto com o texto.
+  int _escutaAtual = 0;
+
+  Future<bool> _ouvir(void Function(String texto) aoReconhecer, {void Function(String)? aoErro}) {
+    final minha = ++_escutaAtual;
+    return _voz.escutar(
+      aoOuvirParcial: _checarSocorro, // SOCORRO vale sempre, mesmo de uma escuta antiga
+      aoReconhecerFinal: (texto) {
+        if (minha != _escutaAtual) return;
+        // TAREFA 27: só que a voz foi usada (ou que não ouviu nada).
+        MollyTelemetria.registrar(
+          texto.trim().isEmpty ? MollyEvento.error : MollyEvento.voiceUsed,
+          texto.trim().isEmpty ? const {'tipo': 'nao_ouviu'} : const {},
+        );
+        aoReconhecer(texto);
+      },
+      aoErro: aoErro,
+    );
+  }
+
+  /// Espera a resposta a uma pergunta da Molly: pelo microfone (como
+  /// sempre) ou, se a pessoa está digitando, pelo campo de texto.
+  Future<void> _esperarResposta(Future<void> Function(String resposta) aoResponder) async {
+    _ouvirDepoisDeInterromper = false; // este fluxo mesmo vai ouvir
+    if (_ultimaEntradaFoiTexto) {
+      _perguntaPendente = aoResponder;
+      _perguntaPendenteDesde = DateTime.now();
+      return;
+    }
+    await _ouvir((resposta) => aoResponder(resposta));
+  }
+
+  /// A pergunta pendente, se ainda valer — e a consome (uma resposta só).
+  Future<void> Function(String)? _pegarPerguntaPendente() {
+    final pendente = _perguntaPendente;
+    final desde = _perguntaPendenteDesde;
+    _perguntaPendente = null;
+    _perguntaPendenteDesde = null;
+    if (pendente == null || desde == null) return null;
+    if (DateTime.now().difference(desde) > _validadeDaPergunta) return null;
+    return pendente;
+  }
+
+  /// Entrada do usuário (voz ou texto): responde a pergunta pendente, se
+  /// houver, senão é um pedido novo.
+  Future<void> _receberEntrada(String texto) async {
+    final pendente = _pegarPerguntaPendente();
+    if (pendente != null) {
+      await pendente(texto);
+    } else {
+      await _processarFala(texto);
+    }
+  }
+
+  Future<void> _enviarTexto() async {
+    final texto = _campoTexto.text.trim();
+    if (texto.isEmpty) return;
+    _campoTexto.clear();
+    FocusScope.of(context).unfocus();
+    _ultimaEntradaFoiTexto = true;
+    MollyTelemetria.registrar(MollyEvento.textUsed);
+    _escutaAtual++; // descarta qualquer fala atrasada da escuta anterior
+    if (_voz.estado.value == MollyVoiceState.listening) _voz.pararEscuta();
+
+    // SOCORRO digitado: mesma prioridade da voz, antes de qualquer coisa.
+    _checarSocorro(texto);
+    if (_sosDisparado) return;
+    setState(() => _mensagem = texto);
+    await _receberEntrada(texto);
+  }
+
   Future<void> _tocarMicrofone() async {
-    if (_voz.estado.value == MollyVoiceState.listening) {
+    final estado = _voz.estado.value;
+    if (estado == MollyVoiceState.listening) {
       _voz.pararEscuta();
       return;
     }
+    if (estado == MollyVoiceState.speaking) {
+      _interromperMolly();
+      return;
+    }
+    _ultimaEntradaFoiTexto = false;
+    await _comecarAOuvir();
+  }
+
+  // ── Interromper a Molly (sessão 26 — 1º passo da TAREFA 33) ─────────
+
+  /// Tocou o microfone com a Molly falando e ninguém abriu a escuta ainda.
+  bool _ouvirDepoisDeInterromper = false;
+
+  /// Corta a fala e ouve a pessoa. Se o fluxo que estava falando já ia
+  /// ouvir a resposta (pergunta sim/não, "o que você quer dizer?"), ele
+  /// mesmo abre o microfone ([_esperarResposta] desliga a flag); senão, abre
+  /// aqui. Ouvir enquanto ela fala, sem toque, é o passo seguinte (ver
+  /// `docs/MOLLY_VOZ_LEVANTAMENTO.md`).
+  void _interromperMolly() {
+    _ultimaEntradaFoiTexto = false; // tocou o microfone: a resposta vem por voz
+    _ouvirDepoisDeInterromper = true;
+    MollyTelemetria.registrar(MollyEvento.interrupted);
+    _voz.interromperFala();
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted || !_ouvirDepoisDeInterromper) return;
+      _ouvirDepoisDeInterromper = false;
+      // O fluxo cortado começou outra fala (ex.: aviso de limite de turnos):
+      // corta também — a pessoa pediu pra falar.
+      if (_voz.estado.value == MollyVoiceState.speaking) _voz.interromperFala();
+      if (_voz.estado.value != MollyVoiceState.listening) _comecarAOuvir();
+    });
+  }
+
+  Future<void> _comecarAOuvir() async {
+    _ouvirDepoisDeInterromper = false;
     setState(() => _mensagem = 'Pode falar.');
-    final disponivel = await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: _processarFala,
+    final disponivel = await _ouvir(
+      _receberEntrada,
       aoErro: (_) {
+        MollyTelemetria.registrar(MollyEvento.error, {'tipo': 'microfone'});
         if (mounted) {
           setState(() => _mensagem = 'Não consegui ouvir. Toque no microfone e tente de novo.');
         }
       },
     );
-    if (!disponivel && mounted) {
-      setState(() => _mensagem = 'Não consegui usar o microfone neste aparelho.');
+    if (!disponivel) {
+      MollyTelemetria.registrar(MollyEvento.error, {'tipo': 'microfone_indisponivel'});
+      if (mounted) setState(() => _mensagem = 'Não consegui usar o microfone neste aparelho.');
     }
   }
 
@@ -376,33 +500,30 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// continua checado durante a escuta; "deixa pra lá"/"cancela" desiste.
   Future<void> _coletarMensagem(String? nomeFamiliar) async {
     if (nomeFamiliar == null || !mounted) return;
-    await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: (resposta) async {
-        if (_sosDisparado) return;
-        final texto = resposta.trim();
-        if (mounted) setState(() => _mensagem = texto.isEmpty ? 'Não entendi.' : texto);
-        if (texto.isEmpty || RegExp(r'^(cancela|cancelar|deixa pra l|deixa para l|esquece)').hasMatch(texto.toLowerCase())) {
-          const fala = 'Tudo bem, não mandei nada.';
-          if (mounted) setState(() => _mensagem = fala);
-          await _voz.falar(fala);
-          return;
-        }
-        // "estou passando mal" como mensagem não pode virar só um texto no
-        // chat — vai pela confirmação de emergência (contagem + Cancelar),
-        // que também avisa a família se o SOS for acionado.
-        if (OfflineIntentService.classificar(texto) == OfflineIntent.possivelEmergencia) {
-          await _falarResultado(MollyToolResult.possivelEmergencia(texto));
-          return;
-        }
-        _voz.marcarPensando();
-        final resultado = await MollyRiskPolicy.executar('sendFamilyMessage', {
-          'nomeFamiliar': nomeFamiliar,
-          'mensagem': MollyFamilyIntent.formatarMensagem(texto),
-        });
-        await _falarResultado(resultado);
-      },
-    );
+    await _esperarResposta((resposta) async {
+      if (_sosDisparado) return;
+      final texto = resposta.trim();
+      if (mounted) setState(() => _mensagem = texto.isEmpty ? 'Não entendi.' : texto);
+      if (texto.isEmpty || RegExp(r'^(cancela|cancelar|deixa pra l|deixa para l|esquece)').hasMatch(texto.toLowerCase())) {
+        const fala = 'Tudo bem, não mandei nada.';
+        if (mounted) setState(() => _mensagem = fala);
+        await _voz.falar(fala);
+        return;
+      }
+      // "estou passando mal" como mensagem não pode virar só um texto no
+      // chat — vai pela confirmação de emergência (contagem + Cancelar),
+      // que também avisa a família se o SOS for acionado.
+      if (OfflineIntentService.classificar(texto) == OfflineIntent.possivelEmergencia) {
+        await _falarResultado(MollyToolResult.possivelEmergencia(texto));
+        return;
+      }
+      _voz.marcarPensando();
+      final resultado = await MollyRiskPolicy.executar('sendFamilyMessage', {
+        'nomeFamiliar': nomeFamiliar,
+        'mensagem': MollyFamilyIntent.formatarMensagem(texto),
+      });
+      await _falarResultado(resultado);
+    });
   }
 
   /// Pergunta em voz alta antes de gravar uma preferência durável sugerida
@@ -421,33 +542,30 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     await _voz.falar(pergunta);
     if (!mounted) return;
 
-    await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: (resposta) async {
-        if (_sosDisparado) return;
-        if (mounted) setState(() => _mensagem = resposta);
-        _voz.marcarPensando();
+    await _esperarResposta((resposta) async {
+      if (_sosDisparado) return;
+      if (mounted) setState(() => _mensagem = resposta);
+      _voz.marcarPensando();
 
-        if (_ehAfirmativo(resposta)) {
-          await LongTermMemoryService.salvar(
-            type: (proposta['tipo'] as String?)?.trim().isNotEmpty == true
-                ? proposta['tipo'] as String
-                : 'preferencia',
-            value: valor.trim(),
-            source: 'conversa',
-            confidence: (proposta['confianca'] as num?)?.toDouble() ?? 0.7,
-            userApproved: true,
-          );
-          const ok = 'Combinado, vou lembrar disso.';
-          if (mounted) setState(() => _mensagem = ok);
-          await _voz.falar(ok);
-        } else {
-          const cancelado = 'Tudo bem, não vou guardar isso.';
-          if (mounted) setState(() => _mensagem = cancelado);
-          await _voz.falar(cancelado);
-        }
-      },
-    );
+      if (_ehAfirmativo(resposta)) {
+        await LongTermMemoryService.salvar(
+          type: (proposta['tipo'] as String?)?.trim().isNotEmpty == true
+              ? proposta['tipo'] as String
+              : 'preferencia',
+          value: valor.trim(),
+          source: 'conversa',
+          confidence: (proposta['confianca'] as num?)?.toDouble() ?? 0.7,
+          userApproved: true,
+        );
+        const ok = 'Combinado, vou lembrar disso.';
+        if (mounted) setState(() => _mensagem = ok);
+        await _voz.falar(ok);
+      } else {
+        const cancelado = 'Tudo bem, não vou guardar isso.';
+        if (mounted) setState(() => _mensagem = cancelado);
+        await _voz.falar(cancelado);
+      }
+    });
   }
 
   /// TAREFA 18 do prompt mestre: uma frase de possível emergência mais
@@ -459,6 +577,9 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// `SosService.trigger()` — o LLM nunca decide isso sozinho (a detecção
   /// veio de `OfflineIntentService`, 100% local).
   Future<void> _confirmarPossivelEmergencia(MollyToolResult pendente) async {
+    // Contagem de emergência na tela: o toque que interrompeu a fala não
+    // abre o microfone por trás do diálogo.
+    _ouvirDepoisDeInterromper = false;
     if (_sosDisparado || !mounted) return;
 
     final duracao = await SettingsService.getSosCountdownSegundos();
@@ -540,25 +661,22 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// ambígua ou CRITICAL (TAREFA 4). Não é a máquina de conversa completa
   /// — só o suficiente para o portão de risco funcionar de ponta a ponta.
   Future<void> _ouvirConfirmacao(MollyToolResult pendente) async {
-    await _voz.escutar(
-      aoOuvirParcial: _checarSocorro,
-      aoReconhecerFinal: (resposta) async {
-        if (_sosDisparado) return;
-        if (mounted) setState(() => _mensagem = resposta);
-        _voz.marcarPensando();
+    await _esperarResposta((resposta) async {
+      if (_sosDisparado) return;
+      if (mounted) setState(() => _mensagem = resposta);
+      _voz.marcarPensando();
 
-        if (_ehAfirmativo(resposta)) {
-          final parametros =
-              (pendente.dados?['parametrosPendentes'] as Map<String, dynamic>?) ?? const {};
-          final resultadoFinal = await MollyRiskPolicy.confirmarEExecutar(pendente.acao, parametros);
-          await _falarResultado(resultadoFinal);
-        } else {
-          const cancelado = 'Tudo bem, não fiz nada.';
-          if (mounted) setState(() => _mensagem = cancelado);
-          await _voz.falar(cancelado);
-        }
-      },
-    );
+      if (_ehAfirmativo(resposta)) {
+        final parametros =
+            (pendente.dados?['parametrosPendentes'] as Map<String, dynamic>?) ?? const {};
+        final resultadoFinal = await MollyRiskPolicy.confirmarEExecutar(pendente.acao, parametros);
+        await _falarResultado(resultadoFinal);
+      } else {
+        const cancelado = 'Tudo bem, não fiz nada.';
+        if (mounted) setState(() => _mensagem = cancelado);
+        await _voz.falar(cancelado);
+      }
+    });
   }
 
   bool _ehAfirmativo(String texto) {
@@ -602,28 +720,50 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
       textAlign: TextAlign.center,
       style: const TextStyle(fontSize: 24, height: 1.3),
     );
+    // Teclado aberto: microfone menor, pra caber tudo com o SOS visível.
+    final tecladoAberto = MediaQuery.viewInsetsOf(context).bottom > 0;
     final botaoMic = ValueListenableBuilder<MollyVoiceState>(
       valueListenable: _voz.estado,
       builder: (context, estado, _) => _BotaoMicrofone(
         ouvindo: estado == MollyVoiceState.listening,
+        falando: estado == MollyVoiceState.speaking,
         onTap: _tocarMicrofone,
+        tamanho: tecladoAberto ? 72 : 120,
       ),
+    );
+    final campoTexto = _CampoDeTexto(
+      controller: _campoTexto,
+      onEnviar: _enviarTexto,
+      // Começou a digitar com o microfone aberto: para de ouvir.
+      onTocar: () {
+        if (_voz.estado.value == MollyVoiceState.listening) _voz.pararEscuta();
+      },
     );
     final botaoSOS = _BotaoSOS(onPressed: _acionarSOSManual);
 
     if (!widget.mostrarLembretesHoje) {
-      // Atalho rápido (bottom sheet): coluna curta, sem lista de
-      // lembretes pra rolar — o SOS já fica visível sem esforço, não
-      // precisa ficar fixo separadamente.
+      // Atalho rápido (bottom sheet): sem lista de lembretes. Só a parte de
+      // cima (estado + mensagem) pode rolar — microfone, campo de texto e
+      // SOS ficam sempre visíveis, mesmo com o teclado ocupando a tela.
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          indicador,
-          const SizedBox(height: 20),
-          mensagem,
-          const SizedBox(height: 36),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  indicador,
+                  SizedBox(height: tecladoAberto ? 12 : 20),
+                  mensagem,
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: tecladoAberto ? 16 : 36),
           botaoMic,
-          const SizedBox(height: 32),
+          SizedBox(height: tecladoAberto ? 16 : 24),
+          campoTexto,
+          SizedBox(height: tecladoAberto ? 16 : 32),
           botaoSOS,
         ],
       );
@@ -644,6 +784,8 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
                 mensagem,
                 const SizedBox(height: 36),
                 botaoMic,
+                const SizedBox(height: 24),
+                campoTexto,
                 const SizedBox(height: 44),
                 const Divider(height: 1),
                 const SizedBox(height: 20),
@@ -666,18 +808,99 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   }
 }
 
-class _BotaoMicrofone extends StatelessWidget {
-  final bool ouvindo;
-  final VoidCallback onTap;
+/// Campo "Ou escreva aqui" + botão de enviar (Fase 1 do prompt mestre:
+/// conversar também por texto). Fonte e alvos de toque grandes, mesmo
+/// padrão do resto do painel (checklist de acessibilidade, TAREFA 30).
+class _CampoDeTexto extends StatelessWidget {
+  final TextEditingController controller;
+  final VoidCallback onEnviar;
+  final VoidCallback onTocar;
 
-  const _BotaoMicrofone({required this.ouvindo, required this.onTap});
+  const _CampoDeTexto({required this.controller, required this.onEnviar, required this.onTocar});
 
   @override
   Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: controller,
+            onTap: onTocar,
+            onSubmitted: (_) => onEnviar(),
+            textInputAction: TextInputAction.send,
+            textCapitalization: TextCapitalization.sentences,
+            minLines: 1,
+            maxLines: 3,
+            style: const TextStyle(fontSize: 22),
+            decoration: InputDecoration(
+              hintText: 'Ou escreva aqui',
+              hintStyle: const TextStyle(fontSize: 20),
+              filled: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Semantics(
+          button: true,
+          label: 'Enviar para a Molly',
+          child: Material(
+            color: const Color(0xFF7B5EA7),
+            shape: const CircleBorder(),
+            elevation: 2,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onEnviar,
+              child: const SizedBox(
+                width: 64,
+                height: 64,
+                child: Icon(Icons.send_rounded, color: Colors.white, size: 32),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BotaoMicrofone extends StatelessWidget {
+  final bool ouvindo;
+
+  /// A Molly está falando: tocar interrompe e abre a escuta (sessão 26).
+  final bool falando;
+  final VoidCallback onTap;
+  final double tamanho;
+
+  const _BotaoMicrofone({required this.ouvindo, required this.onTap, this.falando = false, this.tamanho = 120});
+
+  @override
+  Widget build(BuildContext context) {
+    final botao = _botao();
+    if (!falando) return botao;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        botao,
+        const SizedBox(height: 8),
+        // Sem isso, ninguém descobre que dá pra interromper.
+        const ExcludeSemantics(
+          child: Text('Toque para interromper', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+
+  Widget _botao() {
     final cor = ouvindo ? const Color(0xFF4A90D9) : const Color(0xFF7B5EA7);
     return Semantics(
       button: true,
-      label: ouvindo ? 'Parar de ouvir' : 'Falar com a Molly',
+      label: ouvindo
+          ? 'Parar de ouvir'
+          : falando
+              ? 'Interromper a Molly e falar'
+              : 'Falar com a Molly',
       child: Material(
         color: cor,
         shape: const CircleBorder(),
@@ -686,12 +909,12 @@ class _BotaoMicrofone extends StatelessWidget {
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 120,
-            height: 120,
+            width: tamanho,
+            height: tamanho,
             child: Icon(
               ouvindo ? Icons.stop_rounded : Icons.mic_rounded,
               color: Colors.white,
-              size: 56,
+              size: tamanho * 0.47,
             ),
           ),
         ),
@@ -737,13 +960,9 @@ class _ListaLembretesHoje extends StatelessWidget {
           );
         }
         final agora = DateTime.now();
-        final hoje = snapshot.data!
-            .where((r) =>
-                r.dateTime.year == agora.year &&
-                r.dateTime.month == agora.month &&
-                r.dateTime.day == agora.day)
-            .toList()
-          ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+        // Sessão 26: ocorreEm — inclui os diários/semanais criados em outro dia.
+        final hoje = snapshot.data!.where((r) => r.ocorreEm(agora)).toList()
+          ..sort((a, b) => a.horarioEm(agora).compareTo(b.horarioEm(agora)));
 
         if (hoje.isEmpty) {
           return const Padding(

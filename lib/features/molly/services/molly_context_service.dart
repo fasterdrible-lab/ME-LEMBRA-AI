@@ -1,11 +1,9 @@
 import '../../../models/reminder.dart';
-import '../../../services/family_service.dart';
-import '../../../services/profile_service.dart';
-import '../../../services/reminder_service.dart';
 import '../../../services/settings_service.dart';
 import '../memory/long_term_memory.dart';
 import '../memory/short_term_memory.dart';
 import '../models/molly_user_context.dart';
+import 'molly_cache_service.dart';
 
 /// Monta o contexto do usuário que a MOLLY tem permissão de conhecer
 /// (TAREFA 10 do prompt mestre) — nome, perfil, próximos lembretes,
@@ -27,11 +25,15 @@ import '../models/molly_user_context.dart';
 /// como uma peça de um contexto maior.
 class MollyContextService {
   static Future<MollyUserContext> montar({ShortTermMemory? memoria}) async {
-    final perfil = await ProfileService.getProfile();
-    final nome = await ProfileService.getNameForSelectedProfile();
+    // TAREFA 26: tudo via MollyCache e em paralelo — sem internet, cada
+    // leitura cai na cópia do aparelho em no máximo 3 s (antes eram várias
+    // leituras em sequência, cada uma podendo esperar ~10 s).
+    final perfilF = MollyCache.perfil();
+    final nomeF = MollyCache.nome();
+    final lembretesF = MollyCache.lembretes();
+    final familiaresF = _familiaresSeguro();
 
     final agora = DateTime.now();
-    final todosLembretes = await _lembretesSeguro();
 
     final sosAtivo = await SettingsService.getSos();
     final chatAtivo = await SettingsService.getChat();
@@ -40,13 +42,14 @@ class MollyContextService {
     final memoriaAutorizada = await SettingsService.getMollyMemoriaAutorizada();
     final preferencias = memoriaAutorizada ? await _preferenciasSeguro() : const <Map<String, dynamic>>[];
 
+    final todosLembretes = await lembretesF;
     return MollyUserContext(
-      nome: nome,
-      perfil: perfil,
+      nome: await nomeF,
+      perfil: await perfilF,
       agora: agora,
       proximosLembretes: _proximosLembretes(todosLembretes, agora),
       historicoRecente: _historicoRecente(todosLembretes, agora),
-      familiares: await _familiaresSeguro(),
+      familiares: await familiaresF,
       preferencias: preferencias,
       sosAtivo: sosAtivo,
       chatAtivo: chatAtivo,
@@ -54,14 +57,6 @@ class MollyContextService {
       conversaTurnos: memoria?.turnos ?? 0,
       conversaColetandoLembrete: memoria?.coletandoLembrete ?? false,
     );
-  }
-
-  static Future<List<Reminder>> _lembretesSeguro() async {
-    try {
-      return await ReminderService.getAll();
-    } catch (_) {
-      return const [];
-    }
   }
 
   /// Lembretes de ontem em diante, resumidos — mesma janela e formato que
@@ -107,20 +102,19 @@ class MollyContextService {
   }
 
   static Future<List<String>> _familiaresSeguro() async {
-    try {
-      final membros = await FamilyService.stream().first;
-      return membros.map((m) => m.nome).toList();
-    } catch (_) {
-      return const [];
-    }
+    final membros = await MollyCache.familiares();
+    return membros.map((m) => m.nome).toList();
   }
 
-  static Future<List<Map<String, dynamic>>> _preferenciasSeguro() async {
-    try {
-      final memorias = await LongTermMemoryService.getAll();
-      return memorias.map((m) => {'type': m.type, 'value': m.value}).toList();
-    } catch (_) {
-      return const [];
-    }
-  }
+  /// Preferências só servem à IA, que precisa de internet de qualquer
+  /// jeito — sem rede, fica sem (em vez de esperar).
+  static Future<List<Map<String, dynamic>>> _preferenciasSeguro() =>
+      MollyCache.lerComReserva<List<Map<String, dynamic>>>(
+        rede: () async {
+          final memorias = await LongTermMemoryService.getAll();
+          return memorias.map((m) => {'type': m.type, 'value': m.value}).toList();
+        },
+        local: () async => const [],
+        vazio: const [],
+      );
 }

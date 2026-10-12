@@ -2,14 +2,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../models/reminder.dart';
 import '../../../services/ai_command_service.dart';
-import '../../../services/profile_service.dart';
 import '../../../services/reminder_service.dart';
 import '../../../services/settings_service.dart';
 import '../../../services/sos_feed_service.dart';
 import '../memory/short_term_memory.dart';
 import '../models/molly_tool_result.dart';
 import '../tools/molly_fala_utils.dart';
+import 'molly_cache_service.dart';
 import 'molly_medication_service.dart';
+import 'molly_reminder_parser.dart';
+import 'molly_telemetria.dart';
 import 'molly_risk_policy.dart';
 import 'molly_safety_service.dart';
 import 'offline_intent_service.dart';
@@ -93,10 +95,10 @@ class MollyAgentService {
     // remédio tomado a mais, nunca chega à IA — fala segura fixa, local.
     // Depois do offline de propósito: SOCORRO e as frases suaves de
     // emergência continuam com prioridade sobre isto.
-    final falaSegura = MollySafetyService.respostaSegura(
-      MollySafetyService.classificar(textoLimpo),
-    );
+    final seguranca = MollySafetyService.classificar(textoLimpo);
+    final falaSegura = MollySafetyService.respostaSegura(seguranca);
     if (falaSegura != null) {
+      MollyTelemetria.registrar(MollyEvento.safetyBlock, {'tipo': seguranca.name});
       memoria?.registrarTroca(textoLimpo, falaSegura);
       return MollyToolResult.sucesso(falaSegura, acao: 'seguranca');
     }
@@ -108,6 +110,16 @@ class MollyAgentService {
       return r;
     }
 
+    // Sessão 26: "me lembra do remédio às oito" sem IA — instantâneo, sem
+    // internet e sem gastar token. Só o que o parser entende com segurança;
+    // o resto ("duas horas antes da consulta") segue para a IA.
+    final pedido = MollyReminderParser.interpretarPedido(textoLimpo);
+    if (pedido != null) {
+      final r = await _criarLembreteLocal(pedido, textoLimpo, memoria);
+      memoria?.registrarTroca(textoLimpo, r.fala);
+      return r;
+    }
+
     final acao = await AiCommandService.interpretar(
       textoLimpo,
       historico: memoria?.historicoParaIA ?? const [],
@@ -115,15 +127,19 @@ class MollyAgentService {
     );
 
     if (acao == null) {
+      MollyTelemetria.registrar(MollyEvento.error, {'tipo': 'sem_ia'});
       return MollyToolResult.semIA();
     }
+    // TAREFA 27: quantas vezes a IA foi de fato usada, e para quê (ação do
+    // enum fechado do backend — nunca a frase).
+    MollyTelemetria.registrar(MollyEvento.aiUsed, {'acao': acao.acao});
 
     // "perguntar" põe a conversa em coleta de dia/hora de LEMBRETE. Pergunta
     // de tempo sem cidade ("de qual cidade?") não é isso — fala como resposta
     // normal, senão a próxima fala viraria "Para qual dia?".
     final resultado = (acao.acao == 'perguntar' && AiCommandService.pareceTempo(textoLimpo))
         ? MollyToolResult.sucesso(MollySafetyService.filtrarFalaDaIA(acao.fala))
-        : await _executar(acao, memoria: memoria);
+        : await _executar(acao, texto: textoLimpo, memoria: memoria);
     memoria?.registrarTroca(textoLimpo, resultado.fala);
 
     // Proposta de memória de longo prazo (sessão 24): campo independente
@@ -145,7 +161,39 @@ class MollyAgentService {
     return resultado;
   }
 
-  static Future<MollyToolResult> _executar(ComandoAction acao, {ShortTermMemory? memoria}) async {
+  /// Pedido reconhecido por [MollyReminderParser.interpretarPedido]: com
+  /// hora, cria na hora (mesma ferramenta e política de risco de sempre);
+  /// sem hora, entra na coleta local e o painel pergunta "Que horas?".
+  static Future<MollyToolResult> _criarLembreteLocal(
+    ({String titulo, String tipo, String recorrencia, DateTime? dataHora}) pedido,
+    String texto,
+    ShortTermMemory? memoria,
+  ) async {
+    // TAREFA 27: quantos lembretes deixaram de passar pela IA.
+    MollyTelemetria.registrar(MollyEvento.localReminder, {
+      'resultado': pedido.dataHora == null ? 'pergunta_hora' : 'criado',
+    });
+    if (pedido.dataHora == null) {
+      memoria?.iniciarColetaDeLembrete(texto);
+      // Sem dia dito: hoje — o painel passa para amanhã se o horário
+      // respondido já tiver passado (mesma regra de quando a hora vem na
+      // frase). Só pergunta a hora.
+      final hoje = DateTime.now();
+      memoria?.mesclarSlots(
+        data: MollyReminderParser.extrairData(texto) ?? (dia: hoje.day, mes: hoje.month, ano: hoje.year),
+        hora: null,
+      );
+      return MollyToolResult.esclarecimento('Que horas?', acao: 'coletar_hora');
+    }
+    return MollyRiskPolicy.executar('createReminder', {
+      'titulo': pedido.titulo,
+      'dataHora': pedido.dataHora!.toIso8601String(),
+      'tipo': pedido.tipo,
+      'recorrencia': pedido.recorrencia,
+    });
+  }
+
+  static Future<MollyToolResult> _executar(ComandoAction acao, {required String texto, ShortTermMemory? memoria}) async {
     switch (acao.acao) {
       case 'ouvir_lembretes':
         return MollyRiskPolicy.executar('getTodayReminders', const {});
@@ -178,7 +226,7 @@ class MollyAgentService {
         // prompt mestre, não esses parsers; quem chama [processar] hoje
         // sem checar `memoria.coletandoLembrete` antes de novo turno só
         // volta a chamar a IA, sem esse atalho local.
-        memoria?.coletandoLembrete = true;
+        memoria?.iniciarColetaDeLembrete(texto);
         return MollyToolResult.esclarecimento(MollySafetyService.filtrarFalaDaIA(acao.fala));
       case 'responder':
       default:
@@ -246,9 +294,9 @@ class MollyAgentService {
       await FirebaseAuth.instance.signInAnonymously();
     }
     final userId = FirebaseAuth.instance.currentUser!.uid;
-    final perfil = await ProfileService.getProfile() ?? '';
+    final perfil = await MollyCache.perfil() ?? '';
 
-    final todos = await ReminderService.getAll();
+    final todos = await MollyCache.lembretes();
     Reminder? listaExistente;
     for (final r in todos) {
       if (r.type == 'Compras') {
@@ -266,10 +314,11 @@ class MollyAgentService {
               .toList()
           : <String>[];
       final tudo = [...itensAtuais, ...novosItens];
-      await ReminderService.update(listaExistente.copyWith(description: tudo.join('\n')));
+      final atualizada = listaExistente.copyWith(description: tudo.join('\n'));
+      await MollyCache.escrever(() => ReminderService.update(atualizada));
     } else {
       final dateTime = DateTime.now().add(const Duration(minutes: 1));
-      await ReminderService.add(Reminder(
+      await MollyCache.escrever(() => ReminderService.add(Reminder(
         id: '',
         userId: userId,
         title: 'Lista de compras',
@@ -279,7 +328,7 @@ class MollyAgentService {
         repeat: 'unico',
         notification: '',
         perfil: perfil,
-      ));
+      )));
     }
 
     final itensFrase = novosItens.length == 1

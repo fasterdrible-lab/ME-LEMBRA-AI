@@ -1,8 +1,8 @@
-import '../../../services/profile_service.dart';
 import '../../../services/settings_service.dart';
 import '../models/molly_risk_level.dart';
 import '../models/molly_tool_definition.dart';
 import '../models/molly_tool_result.dart';
+import '../services/molly_cache_service.dart';
 
 /// Ferramenta de perfil da MOLLY (TAREFA 3 do prompt mestre) — wrapper
 /// fino sobre `ProfileService`.
@@ -13,11 +13,11 @@ class ProfileTool {
     risco: MollyRiskLevel.low,
     parametros: const [],
     executar: (_) async {
-      final perfil = await ProfileService.getProfile();
+      final perfil = await MollyCache.perfil();
       if (perfil == null) {
         return MollyToolResult.falha('Não consegui verificar seu perfil agora.', acao: 'getUserProfile');
       }
-      final nome = await ProfileService.getNameForSelectedProfile();
+      final nome = await MollyCache.nome();
       final nomeFrase =
           (nome != null && nome.trim().isNotEmpty) ? 'Seu nome é $nome' : 'Não encontrei um nome salvo';
       return MollyToolResult.sucesso(

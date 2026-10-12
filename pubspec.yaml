@@ -36,6 +36,7 @@ dependencies:
   intl: ^0.19.0
   google_maps_flutter: ^2.9.0
   http: ^1.2.0
+  firebase_analytics: ^11.6.0 # TAREFA 27 (telemetria da Molly) — 11.6 é a da geração do firebase_core 3.15
 
 dev_dependencies:
   flutter_test:

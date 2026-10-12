@@ -2,7 +2,7 @@
 app.py — Backend do comando de voz por IA do Me Lembra Aí.
 
 Recebe a frase transcrita pelo app, verifica o login do usuário (ID token do
-Firebase Auth) e chama a API da Groq para interpretar o comando, devolvendo
+Firebase Auth) e chama a IA (Groq; DeepSeek de reserva) para interpretar o comando, devolvendo
 uma ação estruturada em JSON. O app usa isso quando a frase não bate em
 nenhuma regra local rápida (ver `_processarComando` em elderly_screen.dart);
 se este serviço estiver fora do ar, o app cai sozinho no roteador local.
@@ -16,6 +16,8 @@ Pré-requisitos:
     Console → Configurações do projeto → Contas de serviço → Gerar nova
     chave privada)
   Arquivo .env na mesma pasta com: GROQ_API_KEY=sua_chave_aqui
+    (opcional: DEEPSEEK_API_KEY — reserva paga quando a Groq falhar; ver
+    providers.py e .env.example)
 
 Execução manual:
   python3 app.py
@@ -26,11 +28,9 @@ Execução como serviço systemd:
     systemctl start melembra-ai-backend
 """
 
-import json
 import logging
 import os
 import sys
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,9 +40,9 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
 from flask import Flask, jsonify, request
 from flask_limiter import Limiter
-from groq import Groq
 
 import internet  # tempo e notícias, só quando a frase pede
+import providers  # Groq e DeepSeek atrás de AiProvider (TAREFA 32)
 
 load_dotenv()
 
@@ -58,33 +58,7 @@ log = logging.getLogger(__name__)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SERVICE_ACCOUNT_PATH = os.path.join(SCRIPT_DIR, "serviceAccountKey.json")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
-
-# TAREFAs 31/32: modelos reserva, tentados em ordem quando o anterior falha
-# (429 limite/min, 404 modelo saiu do catálogo, JSON inválido...). Na Groq o
-# limite de 8.000 tokens/min é POR MODELO — cada reserva soma capacidade.
-GROQ_MODELOS = [GROQ_MODEL] + [
-    m.strip()
-    for m in os.environ.get("GROQ_MODELOS_RESERVA", "openai/gpt-oss-120b,qwen/qwen3.8-27b").split(",")
-    if m.strip() and m.strip() != GROQ_MODEL
-]
 ORCAMENTO_SEGUNDOS = 4.0  # depois disso não começa outra tentativa (app desiste em 8 s)
-
-
-def _max_tokens(modelo: str) -> int:
-    """gpt-oss: 1024 (o raciocínio conta). qwen3 na Groq tem limite de 1.000
-    tokens de SAÍDA por minuto — pedir 1024 dá 429 sempre; sem raciocínio,
-    400 sobra pra uma resposta curta."""
-    return 400 if "qwen" in modelo else 1024
-
-
-def _parametros_de_raciocinio(modelo: str) -> dict:
-    """Raciocínio mínimo: gpt-oss aceita "low"; qwen3 aceita "none"."""
-    if "gpt-oss" in modelo:
-        return {"reasoning_effort": "low"}
-    if "qwen3" in modelo:
-        return {"reasoning_effort": "none"}
-    return {}
 
 ACOES_VALIDAS = {
     "criar_lembrete",
@@ -243,10 +217,11 @@ def verificar_token(auth_header: str | None) -> str | None:
 
 
 init_firebase()
-# Sem novas tentativas automáticas: num limite por minuto (429) a Groq pede
-# 13-22 s de espera, mas o app desiste em 8 s. Em vez de esperar, passa
-# pro modelo reserva (GROQ_MODELOS). 3 s por tentativa: normal é < 1 s.
-groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0, timeout=3.0)
+# TAREFAs 31/32: modelos da Groq em ordem (limite de tokens/min é POR
+# MODELO — cada reserva soma capacidade) e, se todos falharem, o DeepSeek
+# (só se DEEPSEEK_API_KEY estiver no .env). Ver providers.py.
+PROVEDORES = providers.provedores_do_ambiente()
+log.info("Provedores de IA, em ordem: %s", ", ".join(p.nome for p in PROVEDORES))
 
 app = Flask(__name__)
 limiter = Limiter(
@@ -370,33 +345,19 @@ def interpretar_comando():
     info_internet = _consultar_internet(texto, contexto.get("localizacao"), historico)
 
     mensagens = _montar_mensagens(agora, lembretes, historico, texto, modo_companhia, info_internet)
-    inicio = time.monotonic()
-    for modelo in GROQ_MODELOS:
-        # O app desiste em 8 s: sem tempo pra outra tentativa, para aqui.
-        if time.monotonic() - inicio > ORCAMENTO_SEGUNDOS:
-            break
-        try:
-            completion = groq_client.chat.completions.create(
-                model=modelo,
-                response_format={"type": "json_object"},
-                # Modelos com raciocínio contam esses tokens no max_tokens:
-                # com 400 e muitos lembretes, o limite estourava antes do
-                # JSON (400 json_validate_failed, resposta vazia — sessão
-                # 25). 1024 + raciocínio mínimo resolve.
-                max_tokens=_max_tokens(modelo),
-                temperature=0.2,
-                messages=mensagens,
-                extra_body=_parametros_de_raciocinio(modelo),
-            )
-            raw = json.loads(completion.choices[0].message.content)
-            acao = ComandoAction.from_raw(raw)
-            if modelo != GROQ_MODELOS[0]:
-                log.warning("Comando de %s respondido pelo modelo reserva %s", uid, modelo)
-            return jsonify(acao.to_dict())
-        except Exception as exc:  # noqa: BLE001 — 429, 404, json inválido...: tenta o próximo
-            log.error("Falha ao interpretar comando de %s com %s: %s", uid, modelo, exc)
-
-    return jsonify({"erro": "falha ao interpretar"}), 502
+    # Modelos com raciocínio contam esses tokens no max_tokens: com 400 e
+    # muitos lembretes, o limite estourava antes do JSON (sessão 25) —
+    # max_tokens/raciocínio por modelo ficam em providers.GroqProvider.
+    resultado = providers.interpretar(
+        PROVEDORES, mensagens, validar=ComandoAction.from_raw, orcamento_segundos=ORCAMENTO_SEGUNDOS
+    )
+    if resultado is None:
+        log.error("Nenhum provedor respondeu o comando de %s", uid)
+        return jsonify({"erro": "falha ao interpretar"}), 502
+    acao, provedor = resultado
+    if provedor is not PROVEDORES[0]:
+        log.warning("Comando de %s respondido pelo reserva %s", uid, provedor.nome)
+    return jsonify(acao.to_dict())
 
 
 @app.route("/healthz", methods=["GET"])

@@ -54,6 +54,22 @@ class ProfileService {
     return salvo == null ? null : _normalizarPerfil(salvo);
   }
 
+  /// Só o perfil salvo no aparelho, sem Firestore (cache da Molly, TAREFA 26).
+  static Future<String?> getProfileLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final salvo = prefs.getString(_keyPerfil);
+    return salvo == null ? null : _normalizarPerfil(salvo);
+  }
+
+  /// TAREFA 21 (sessão 26): o servidor (`server/remedio_notifier.py`) só
+  /// avisa a família de quem tem `avisarFamiliaRemedio: true`. Não espera o
+  /// servidor confirmar — sem internet, o Firestore envia quando voltar.
+  static void setAvisarFamiliaRemedio(bool v) {
+    final doc = _userDoc;
+    if (doc == null) return;
+    doc.set({'avisarFamiliaRemedio': v}, SetOptions(merge: true)).catchError((_) {});
+  }
+
   // Chave derivada do perfil, ex: "nome_Adulto"
   static String _nameKey(String perfil) => 'nome_$perfil';
 

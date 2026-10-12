@@ -1,11 +1,12 @@
 import '../../../models/reminder.dart';
-import '../../../services/reminder_service.dart';
+import 'molly_cache_service.dart';
 import '../../../services/sos_service.dart';
 import '../models/molly_tool_result.dart';
 import '../tools/family_tool.dart';
 import '../tools/molly_fala_utils.dart';
 import 'molly_family_intent.dart';
 import 'molly_risk_policy.dart';
+import 'molly_telemetria.dart';
 
 /// Os cinco comandos críticos reconhecidos localmente (TAREFA 17 do
 /// prompt mestre) — um por exemplo dado na tarefa, na mesma ordem — mais
@@ -97,7 +98,12 @@ class OfflineIntentService {
   /// Devolve `null` se [classificar] não reconheceu nada — quem chama
   /// deve então tentar a IA.
   static Future<MollyToolResult?> tentar(String texto) async {
-    switch (classificar(texto)) {
+    final intencao = classificar(texto);
+    if (intencao != OfflineIntent.nenhuma) {
+      // TAREFA 27: qual comando local foi usado (nome do enum, nunca a frase).
+      MollyTelemetria.registrar(MollyEvento.offlineCommand, {'comando': intencao.name});
+    }
+    switch (intencao) {
       case OfflineIntent.socorro:
         return _acionarSocorro();
       case OfflineIntent.possivelEmergencia:
@@ -320,17 +326,14 @@ class OfflineIntentService {
   static Future<MollyToolResult> _confirmarRemedio() async {
     List<Reminder> candidatos;
     try {
-      final todos = await ReminderService.getAll();
+      final todos = await MollyCache.lembretes();
       final agora = DateTime.now();
+      // Sessão 26: remédio diário de outro dia também; "já confirmado" é só hoje.
       candidatos = todos
           .where((r) =>
-              (r.type == 'Remedio' || r.type == 'Tomar') &&
-              !r.confirmed &&
-              r.dateTime.year == agora.year &&
-              r.dateTime.month == agora.month &&
-              r.dateTime.day == agora.day)
+              (r.type == 'Remedio' || r.type == 'Tomar') && r.ocorreEm(agora) && !r.confirmadoEm(agora))
           .toList()
-        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+        ..sort((a, b) => a.horarioEm(agora).compareTo(b.horarioEm(agora)));
     } catch (_) {
       candidatos = const [];
     }

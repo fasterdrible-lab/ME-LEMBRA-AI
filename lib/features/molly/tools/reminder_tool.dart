@@ -2,11 +2,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../models/reminder.dart';
 import '../../../services/notification_service.dart';
-import '../../../services/profile_service.dart';
 import '../../../services/reminder_service.dart';
 import '../models/molly_risk_level.dart';
 import '../models/molly_tool_definition.dart';
 import '../models/molly_tool_result.dart';
+import '../services/molly_cache_service.dart';
 import '../services/molly_prompt_service.dart';
 import 'molly_fala_utils.dart';
 
@@ -65,7 +65,7 @@ class ReminderTool {
 
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
-      final perfil = await ProfileService.getProfile() ?? '';
+      final perfil = await MollyCache.perfil() ?? '';
 
       final reminder = Reminder(
         id: '',
@@ -78,7 +78,7 @@ class ReminderTool {
         notification: '',
         perfil: perfil,
       );
-      await ReminderService.add(reminder);
+      final enviado = await MollyCache.escrever(() => ReminderService.add(reminder));
       await _agendarNotificacao(titulo: titulo, tipo: tipo, dataHora: dataHora, recorrencia: recorrencia);
 
       final diaStr = dataHora.day.toString().padLeft(2, '0');
@@ -90,7 +90,8 @@ class ReminderTool {
               : ', para $diaStr de $mesStr';
       final tipoFrase = _tipoLabels[tipo] != null ? '${_tipoLabels[tipo]} ' : '';
       return MollyToolResult.sucesso(
-        'Lembrete ${tipoFrase}criado: $titulo$repeatFrase às ${horaFalada(dataHora)}.',
+        'Lembrete ${tipoFrase}criado: $titulo$repeatFrase às ${horaFalada(dataHora)}.'
+        '${enviado ? '' : ' Estou sem internet agora, mas o aviso vai tocar normalmente.'}',
         acao: 'createReminder',
       );
     } catch (_) {
@@ -153,14 +154,11 @@ class ReminderTool {
     required String acao,
     required String semLembretesFrase,
   }) async {
-    final lembretes = await ReminderService.getAll();
-    final doDia = lembretes
-        .where((r) =>
-            r.dateTime.year == referencia.year &&
-            r.dateTime.month == referencia.month &&
-            r.dateTime.day == referencia.day)
-        .toList()
-      ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    final lembretes = await MollyCache.lembretes();
+    // Sessão 26: ocorreEm — lembrete diário/semanal criado em outro dia
+    // também aparece (antes só o do dia da criação).
+    final doDia = lembretes.where((r) => r.ocorreEm(referencia)).toList()
+      ..sort((a, b) => a.horarioEm(referencia).compareTo(b.horarioEm(referencia)));
 
     if (doDia.isEmpty) {
       return MollyToolResult.sucesso(semLembretesFrase, acao: acao);
@@ -195,7 +193,7 @@ class ReminderTool {
 
   static Future<MollyToolResult> _updateReminder(Map<String, dynamic> p) async {
     final id = (p['id'] as String).trim();
-    final todos = await ReminderService.getAll();
+    final todos = await MollyCache.lembretes();
     Reminder? atual;
     for (final r in todos) {
       if (r.id == id) {
@@ -230,8 +228,11 @@ class ReminderTool {
       description: novaDescricao,
     );
     try {
-      await ReminderService.update(atualizado);
-      return MollyToolResult.sucesso('Lembrete atualizado.', acao: 'updateReminder');
+      final enviado = await MollyCache.escrever(() => ReminderService.update(atualizado));
+      return MollyToolResult.sucesso(
+        enviado ? 'Lembrete atualizado.' : 'Lembrete atualizado. Estou sem internet agora; salvo quando ela voltar.',
+        acao: 'updateReminder',
+      );
     } catch (_) {
       return MollyToolResult.falha('Não consegui atualizar o lembrete.', acao: 'updateReminder');
     }
@@ -255,7 +256,7 @@ class ReminderTool {
   static Future<MollyToolResult> _deleteReminder(Map<String, dynamic> p) async {
     final id = (p['id'] as String).trim();
     try {
-      await ReminderService.delete(id);
+      await MollyCache.escrever(() => ReminderService.delete(id));
       return MollyToolResult.sucesso('Lembrete excluído.', acao: 'deleteReminder');
     } catch (_) {
       return MollyToolResult.falha('Não consegui excluir esse lembrete.', acao: 'deleteReminder');
@@ -275,8 +276,16 @@ class ReminderTool {
   static Future<MollyToolResult> _confirmReminder(Map<String, dynamic> p) async {
     final id = (p['id'] as String).trim();
     try {
-      await ReminderService.confirm(id);
-      return MollyToolResult.sucesso('Lembrete confirmado.', acao: 'confirmReminder');
+      // Sem internet: a marcação fica no aparelho; o aviso à família (que
+      // ReminderService.confirm manda depois de salvar) sai quando a
+      // conexão voltar.
+      final enviado = await MollyCache.escrever(() => ReminderService.confirm(id));
+      return MollyToolResult.sucesso(
+        enviado
+            ? 'Lembrete confirmado.'
+            : 'Lembrete confirmado. Estou sem internet agora; aviso sua família quando ela voltar.',
+        acao: 'confirmReminder',
+      );
     } catch (_) {
       return MollyToolResult.falha('Não consegui confirmar esse lembrete.', acao: 'confirmReminder');
     }
@@ -295,7 +304,7 @@ class ReminderTool {
   static Future<MollyToolResult> _getReminderHistory(Map<String, dynamic> p) async {
     final dias = (p['dias'] as int?) ?? 30;
     final limite = DateTime.now().subtract(Duration(days: dias));
-    final todos = await ReminderService.getAll();
+    final todos = await MollyCache.lembretes();
     final confirmados = todos.where((r) => r.confirmed && r.dateTime.isAfter(limite)).toList()
       ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
 
