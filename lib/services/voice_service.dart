@@ -3,6 +3,8 @@ import 'dart:collection';
 
 import 'package:flutter_tts/flutter_tts.dart';
 
+import 'settings_service.dart';
+
 /// Serviço de Text-to-Speech com fila, controle de estado e callbacks.
 class VoiceService {
   // Instância padrão — voz normal para leitura de lembretes
@@ -15,10 +17,21 @@ class VoiceService {
   static final FlutterTts _alertTts = FlutterTts();
   static bool _alertInitialized = false;
 
+  static const double _velocidadeNormal = 0.48; // levemente mais natural que 0.45
+  static const double _velocidadeLenta = 0.36;
+
+  /// Aplica a "Velocidade da voz" das Configurações da Molly na hora, sem
+  /// esperar o app reiniciar.
+  static Future<void> aplicarVelocidade({required bool lenta}) async {
+    if (!_initialized) return; // _ensureInit já lê a preferência
+    await _tts.setSpeechRate(lenta ? _velocidadeLenta : _velocidadeNormal);
+  }
+
   static Future<void> _ensureInit() async {
     if (_initialized) return;
     await _tts.setLanguage('pt-BR');
-    await _tts.setSpeechRate(0.48);  // levemente mais natural que 0.45
+    final lenta = await SettingsService.getVozLenta();
+    await _tts.setSpeechRate(lenta ? _velocidadeLenta : _velocidadeNormal);
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
     await _tts.awaitSpeakCompletion(true);

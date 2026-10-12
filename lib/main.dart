@@ -18,6 +18,7 @@ import 'features/family/family_screen.dart';
 import 'features/maps/map_screen.dart';
 import 'features/molly/screens/molly_memory_screen.dart';
 import 'features/molly/screens/molly_screen.dart';
+import 'features/molly/screens/molly_settings_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'config_screen.dart';
 import 'history_screen.dart';
@@ -145,6 +146,8 @@ class MeLembraApp extends StatelessWidget {
         '/molly': (context) => const MollyScreen(),
         // Idem (TAREFA 9) — ver docstring de MollyMemoryScreen.
         '/molly-memory': (context) => const MollyMemoryScreen(),
+        // TAREFA 24 — aberta por Configurações → "Configurações da Molly".
+        '/molly-settings': (context) => const MollySettingsScreen(),
         '/config': (context) => Scaffold(
               appBar: AppBar(
                 title: const Text('Configurações'),

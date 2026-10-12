@@ -9,7 +9,9 @@ import '../../../services/sos_feed_service.dart';
 import '../memory/short_term_memory.dart';
 import '../models/molly_tool_result.dart';
 import '../tools/molly_fala_utils.dart';
+import 'molly_medication_service.dart';
 import 'molly_risk_policy.dart';
+import 'molly_safety_service.dart';
 import 'offline_intent_service.dart';
 
 /// Núcleo da MOLLY (TAREFA 2 do prompt mestre — ver
@@ -87,6 +89,25 @@ class MollyAgentService {
       return resultadoOffline;
     }
 
+    // TAREFAs 21/22: pergunta de dose/indicação/diagnóstico, ou relato de
+    // remédio tomado a mais, nunca chega à IA — fala segura fixa, local.
+    // Depois do offline de propósito: SOCORRO e as frases suaves de
+    // emergência continuam com prioridade sobre isto.
+    final falaSegura = MollySafetyService.respostaSegura(
+      MollySafetyService.classificar(textoLimpo),
+    );
+    if (falaSegura != null) {
+      memoria?.registrarTroca(textoLimpo, falaSegura);
+      return MollyToolResult.sucesso(falaSegura, acao: 'seguranca');
+    }
+
+    // TAREFA 21: "já tomei meu remédio hoje?" — histórico local do dia.
+    if (MollyMedicationService.ehPerguntaRemediosDeHoje(textoLimpo)) {
+      final r = await MollyMedicationService.responderRemediosDeHoje();
+      memoria?.registrarTroca(textoLimpo, r.fala);
+      return r;
+    }
+
     final acao = await AiCommandService.interpretar(
       textoLimpo,
       historico: memoria?.historicoParaIA ?? const [],
@@ -153,11 +174,13 @@ class MollyAgentService {
         // sem checar `memoria.coletandoLembrete` antes de novo turno só
         // volta a chamar a IA, sem esse atalho local.
         memoria?.coletandoLembrete = true;
-        return MollyToolResult.esclarecimento(acao.fala);
+        return MollyToolResult.esclarecimento(MollySafetyService.filtrarFalaDaIA(acao.fala));
       case 'responder':
       default:
+        // TAREFA 22, camada de saída: texto livre da IA passa pelo filtro
+        // de segurança antes de ser falado.
         return MollyToolResult.sucesso(
-          acao.fala.isNotEmpty ? acao.fala : 'Não entendi. Pode repetir?',
+          acao.fala.isNotEmpty ? MollySafetyService.filtrarFalaDaIA(acao.fala) : 'Não entendi. Pode repetir?',
         );
     }
   }

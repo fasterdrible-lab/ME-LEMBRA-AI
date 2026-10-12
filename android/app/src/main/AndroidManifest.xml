@@ -13,7 +13,12 @@
     <uses-permission android:name="android.permission.CALL_PHONE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Tipo "health" do SosProtectionService (detector de queda). Antes era
+         dataSync, que no Android 15+ tem teto de 6h/24h e mata o app ao
+         estourar. HIGH_SAMPLING_RATE_SENSORS (concedida na instalação) é o
+         pré-requisito exigido pelo Android 14+ para iniciar um FGS health. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH"/>
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"/>
     <application
         android:label="me_lembra_ai"
         android:name="${applicationName}"
@@ -72,7 +77,7 @@
         <service
             android:name=".SosProtectionService"
             android:exported="false"
-            android:foregroundServiceType="dataSync"/>
+            android:foregroundServiceType="health"/>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

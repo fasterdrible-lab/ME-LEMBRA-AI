@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -57,9 +58,29 @@ class SosProtectionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification())
+        // Tipo "health" (não dataSync): dataSync tem teto de 6h/24h no
+        // Android 15+ e o sistema mata o app inteiro ao estourar
+        // (ForegroundServiceDidNotStopInTimeException, sessão 24).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
         startHeadlessFlutterIfNeeded()
         return START_STICKY
+    }
+
+    /**
+     * Rede de segurança: se algum dia o sistema impuser um limite de tempo a
+     * este tipo de serviço, é obrigatório parar em poucos segundos — senão o
+     * Android mata o app inteiro à força. Parar o serviço é melhor que crash.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopSelf()
     }
 
     override fun onDestroy() {

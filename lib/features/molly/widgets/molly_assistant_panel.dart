@@ -11,10 +11,13 @@ import '../memory/short_term_memory.dart';
 import '../models/molly_tool_result.dart';
 import '../services/molly_agent_service.dart';
 import '../services/molly_context_service.dart';
+import '../services/molly_family_intent.dart';
+import '../services/offline_intent_service.dart';
 import '../services/molly_proactive_service.dart';
 import '../services/molly_reminder_parser.dart';
 import '../services/molly_risk_policy.dart';
 import '../services/molly_voice_service.dart';
+import '../tools/molly_fala_utils.dart';
 import 'listening_indicator.dart';
 
 /// Painel interativo da MOLLY (indicador de estado, mensagem, botão de
@@ -127,14 +130,66 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// usuário perder o começo do que ela ia dizer.
   Future<void> _aoAbrir() async {
     if (!mounted) return;
-    final aviso = await MollyProactiveService.verificarRemedioAtrasado();
+    // TAREFA 24: "Avisos da Molly" desligado → não avisa remédio atrasado.
+    final aviso = await SettingsService.getMollyAvisosProativos()
+        ? await MollyProactiveService.verificarRemedioAtrasado()
+        : null;
     if (aviso != null && mounted) {
-      setState(() => _mensagem = aviso);
-      await _voz.falar(aviso);
+      // TAREFA 23: a pergunta vira conversa — a resposta decide o resto.
+      await _perguntarSobreRemedio(aviso);
+      return;
     }
     if (widget.autoIniciar && mounted) {
       await _tocarMicrofone();
     }
+  }
+
+  /// TAREFA 23: "Você conseguiu tomar seu remédio?" → sim: marca como
+  /// tomado; não: "Quer que eu lembre novamente?"; qualquer outra coisa:
+  /// trata como um pedido normal (a pessoa abriu a Molly pra outra coisa).
+  Future<void> _perguntarSobreRemedio(AvisoRemedio aviso) async {
+    setState(() => _mensagem = aviso.pergunta);
+    await _voz.falar(aviso.pergunta);
+    if (!mounted) return;
+    await _voz.escutar(
+      aoOuvirParcial: _checarSocorro,
+      aoReconhecerFinal: (resposta) async {
+        if (_sosDisparado || !mounted) return;
+        switch (MollyProactiveService.classificarResposta(resposta)) {
+          case RespostaSimNao.sim:
+            setState(() => _mensagem = resposta);
+            _voz.marcarPensando();
+            final r = await MollyRiskPolicy.executar('confirmReminder', {'id': aviso.lembrete.id});
+            await _falarResultado(r.sucesso ? MollyToolResult.sucesso('Ótimo! Marquei como tomado.') : r);
+          case RespostaSimNao.nao:
+            setState(() => _mensagem = resposta);
+            await _oferecerLembrarDeNovo(aviso);
+          case RespostaSimNao.outra:
+            await _processarFala(resposta);
+        }
+      },
+    );
+  }
+
+  Future<void> _oferecerLembrarDeNovo(AvisoRemedio aviso) async {
+    const pergunta = 'Quer que eu lembre novamente daqui a 15 minutos?';
+    setState(() => _mensagem = pergunta);
+    await _voz.falar(pergunta);
+    if (!mounted) return;
+    await _voz.escutar(
+      aoOuvirParcial: _checarSocorro,
+      aoReconhecerFinal: (resposta) async {
+        if (_sosDisparado || !mounted) return;
+        if (MollyProactiveService.classificarResposta(resposta) != RespostaSimNao.sim) {
+          await _falarResultado(MollyToolResult.sucesso('Tudo bem.'));
+          return;
+        }
+        final quando = await MollyProactiveService.lembrarDeNovo(aviso.lembrete);
+        await _falarResultado(MollyToolResult.sucesso(quando == null
+            ? 'Já lembrei desse remédio algumas vezes hoje. Se precisar, peça ajuda à sua família.'
+            : 'Combinado. Te lembro às ${horaFalada(quando)}.'));
+      },
+    );
   }
 
   @override
@@ -308,7 +363,46 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
 
     if (resultado.precisaConfirmacaoDeMemoria) {
       await _confirmarMemoria(resultado);
+      return;
     }
+
+    if (resultado.acao == 'coletar_mensagem') {
+      await _coletarMensagem(resultado.dados?['nomeFamiliar'] as String?);
+    }
+  }
+
+  /// TAREFA 20: "manda mensagem pro meu filho" sem dizer o quê — a pergunta
+  /// já foi falada; ouve a próxima fala e manda ela como mensagem. SOCORRO
+  /// continua checado durante a escuta; "deixa pra lá"/"cancela" desiste.
+  Future<void> _coletarMensagem(String? nomeFamiliar) async {
+    if (nomeFamiliar == null || !mounted) return;
+    await _voz.escutar(
+      aoOuvirParcial: _checarSocorro,
+      aoReconhecerFinal: (resposta) async {
+        if (_sosDisparado) return;
+        final texto = resposta.trim();
+        if (mounted) setState(() => _mensagem = texto.isEmpty ? 'Não entendi.' : texto);
+        if (texto.isEmpty || RegExp(r'^(cancela|cancelar|deixa pra l|deixa para l|esquece)').hasMatch(texto.toLowerCase())) {
+          const fala = 'Tudo bem, não mandei nada.';
+          if (mounted) setState(() => _mensagem = fala);
+          await _voz.falar(fala);
+          return;
+        }
+        // "estou passando mal" como mensagem não pode virar só um texto no
+        // chat — vai pela confirmação de emergência (contagem + Cancelar),
+        // que também avisa a família se o SOS for acionado.
+        if (OfflineIntentService.classificar(texto) == OfflineIntent.possivelEmergencia) {
+          await _falarResultado(MollyToolResult.possivelEmergencia(texto));
+          return;
+        }
+        _voz.marcarPensando();
+        final resultado = await MollyRiskPolicy.executar('sendFamilyMessage', {
+          'nomeFamiliar': nomeFamiliar,
+          'mensagem': MollyFamilyIntent.formatarMensagem(texto),
+        });
+        await _falarResultado(resultado);
+      },
+    );
   }
 
   /// Pergunta em voz alta antes de gravar uma preferência durável sugerida

@@ -86,15 +86,35 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
     }
   }
 
+  /// TAREFA 24: "Molly ativa" nas Configurações da Molly. Padrão `true`.
+  bool _mollyAtiva = true;
+
+  Future<void> _carregarMollyAtiva() async {
+    final v = await SettingsService.getMollyAtiva();
+    if (mounted && v != _mollyAtiva) setState(() => _mollyAtiva = v);
+  }
+
   @override
   void initState() {
     super.initState();
     FallDetectorService.start();
     NotificationService.scheduleMorningBriefing();
+    _carregarMollyAtiva();
+    // TAREFA 23: tocar em "Você conseguiu tomar seu remédio?" abre a Molly
+    // aqui — tanto com o app já aberto (listener) quanto aberto do zero
+    // pela notificação (pedido pendente, checado no primeiro frame).
+    NotificationService.pedidosAbrirMolly.addListener(_abrirMollySePedido);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _abrirMollySePedido());
+  }
+
+  void _abrirMollySePedido() {
+    if (!mounted || !NotificationService.consumirPedidoAbrirMolly()) return;
+    MollyAssistantPanel.abrirComoAtalho(context);
   }
 
   @override
   void dispose() {
+    NotificationService.pedidosAbrirMolly.removeListener(_abrirMollySePedido);
     _speech.stop();
     FallDetectorService.stop();
     super.dispose();
@@ -1209,7 +1229,8 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
           IconButton(
             icon: const Icon(Icons.settings, size: 30),
             tooltip: 'Configurações',
-            onPressed: () => Navigator.pushNamed(context, '/config'),
+            // Recarrega "Molly ativa" ao voltar das Configurações.
+            onPressed: () => Navigator.pushNamed(context, '/config').then((_) => _carregarMollyAtiva()),
           ),
         ],
       ),
@@ -1230,6 +1251,8 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                 height: 80,
               ),
               const SizedBox(height: 16),
+              // TAREFA 24: some quando "Molly ativa" está desligada.
+              if (_mollyAtiva) ...[
               _botaoGrande(
                 icon: Icons.mic_none,
                 label: 'Assistente Molly',
@@ -1267,6 +1290,7 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                 ),
               ],
               const SizedBox(height: 16),
+              ],
               _botaoGrande(
                 icon: Icons.list_alt,
                 label: 'Meus Lembretes',

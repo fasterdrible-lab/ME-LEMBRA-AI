@@ -1,12 +1,13 @@
 import 'dart:async';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
 import '../features/molly/services/molly_briefing_service.dart';
 import 'profile_service.dart';
+import 'settings_service.dart';
 import 'voice_service.dart';
 
 class NotificationService {
@@ -24,6 +25,14 @@ class NotificationService {
       if (scheduledDate.isBefore(DateTime.now())) return;
 
       final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
+
+      await agendarAcompanhamentoRemedio(
+        idLembrete: id,
+        title: title,
+        body: body,
+        horarioLembrete: scheduledDate,
+        repeat: repeat,
+      );
 
       const androidDetails = AndroidNotificationDetails(
         'me_lembra_ai_channel',
@@ -83,6 +92,155 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
   static final Map<int, Timer> _voiceTimers = {};
+
+  // ---------------------------------------------------------------------
+  // TAREFA 23 (proatividade da Molly): 15 min depois de cada lembrete de
+  // remédio, uma notificação "Você conseguiu tomar seu remédio?". Tocar
+  // nela pede pra tela Melhor Idade abrir a Molly, que faz a pergunta e
+  // ouve a resposta. Cancelada quando o remédio é confirmado
+  // (`ReminderService.confirm`) ou o lembrete apagado/editado ([cancel]).
+  // ---------------------------------------------------------------------
+
+  static const String payloadAcompanhamentoRemedio = 'molly_remedio';
+  static const Duration atrasoAcompanhamento = Duration(minutes: 15);
+
+  /// Incrementa quando o usuário toca numa notificação de acompanhamento —
+  /// `elderly_screen.dart` escuta e abre a Molly.
+  static final ValueNotifier<int> pedidosAbrirMolly = ValueNotifier(0);
+  static bool _abrirMollyPendente = false;
+
+  /// Consome o pedido pendente (inclusive o de quando o app foi aberto
+  /// pela notificação, antes da tela existir). `true` = abrir a Molly.
+  static bool consumirPedidoAbrirMolly() {
+    final p = _abrirMollyPendente;
+    _abrirMollyPendente = false;
+    return p;
+  }
+
+  static int idAcompanhamento(int idLembrete) => (idLembrete ^ 0x15A5A5A5) & 0x7FFFFFFF;
+
+  /// ID de um "lembra de novo" da Molly — estável por lembrete (ID do
+  /// Firestore) + tentativa, 31 bits, sem colidir com o 8000 do bom dia.
+  static int idRelembrar(String reminderId, int tentativa) =>
+      ((reminderId.hashCode ^ 0x2E1A0000) + tentativa) & 0x7FFFFFFF;
+
+  /// ID da notificação principal de um lembrete — a mesma fórmula usada
+  /// em todas as telas que agendam (título + data/hora original).
+  static int idDoLembrete(String title, DateTime dateTime) =>
+      (title.hashCode ^ dateTime.millisecondsSinceEpoch).remainder(2147483647).abs();
+
+  /// Remédio confirmado: some com os "lembra de novo" pendentes dele.
+  static Future<void> cancelarRelembretes(String reminderId, {int maxTentativas = 2}) async {
+    for (var i = 0; i < maxTentativas; i++) {
+      await _plugin.cancel(idRelembrar(reminderId, i));
+    }
+  }
+
+  /// Sem "tomar" de propósito: na tela de criar lembrete o tipo "Tomar" é
+  /// "Hora de tomar água!" — água não ganha "conseguiu tomar seu remédio?".
+  static bool pareceRemedio(String title, String body) {
+    final t = '$title $body'.toLowerCase();
+    return t.contains('remed') || t.contains('remédio') || t.contains('medica') ||
+        t.contains('comprimido') || t.contains('\u{1F48A}');
+  }
+
+  /// Agenda o acompanhamento de um lembrete de remédio — só no perfil
+  /// Melhor Idade e com "Avisos da Molly" ligado. [repeat]: 'unico',
+  /// 'diario' ou 'semanal'. Nunca lança (não pode atrapalhar o lembrete).
+  static Future<void> agendarAcompanhamentoRemedio({
+    required int idLembrete,
+    required String title,
+    required String body,
+    required DateTime horarioLembrete,
+    String repeat = 'unico',
+  }) async {
+    try {
+      if (!pareceRemedio(title, body)) return;
+      if (await ProfileService.getProfile() != 'Melhor Idade') return;
+      if (!await SettingsService.getMollyAvisosProativos()) return;
+
+      var quando = horarioLembrete.add(atrasoAcompanhamento);
+      final agora = DateTime.now();
+      if (repeat == 'diario') {
+        while (!quando.isAfter(agora)) {
+          quando = quando.add(const Duration(days: 1));
+        }
+      } else if (repeat == 'semanal') {
+        while (!quando.isAfter(agora)) {
+          quando = quando.add(const Duration(days: 7));
+        }
+      } else if (!quando.isAfter(agora)) {
+        return;
+      }
+
+      const androidDetails = AndroidNotificationDetails(
+        'me_lembra_ai_channel',
+        'Lembretes',
+        channelDescription: 'Notificações de lembretes do Me Lembra AI',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+      );
+      await _plugin.zonedSchedule(
+        idAcompanhamento(idLembrete),
+        'Você conseguiu tomar seu remédio?',
+        '${body.trim()} — toque para responder à Molly.',
+        tz.TZDateTime.from(quando, tz.local),
+        const NotificationDetails(android: androidDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: repeat == 'diario'
+            ? DateTimeComponents.time
+            : repeat == 'semanal'
+                ? DateTimeComponents.dayOfWeekAndTime
+                : null,
+        payload: payloadAcompanhamentoRemedio,
+      );
+    } catch (_) {}
+  }
+
+  /// Remédio confirmado: cancela o acompanhamento de hoje; se for
+  /// recorrente, reagenda a partir da próxima ocorrência.
+  static Future<void> remedioConfirmado({
+    required int idLembrete,
+    required String title,
+    required DateTime horarioLembrete,
+    required String repeat,
+    String tipo = '',
+  }) async {
+    try {
+      await _plugin.cancel(idAcompanhamento(idLembrete));
+      if (repeat == 'diario' || repeat == 'semanal') {
+        final passo = Duration(days: repeat == 'diario' ? 1 : 7);
+        var proximo = horarioLembrete;
+        while (!proximo.isAfter(DateTime.now())) {
+          proximo = proximo.add(passo);
+        }
+        // Tipo no título ("Remedio"/"Tomar"): o nome sozinho ("Losartana")
+        // não diria que é remédio.
+        await agendarAcompanhamentoRemedio(
+          idLembrete: idLembrete,
+          title: tipo,
+          body: title,
+          horarioLembrete: proximo,
+          repeat: repeat,
+        );
+      }
+    } catch (_) {}
+  }
+
+  /// "Avisos da Molly" desligado: cancela todos os acompanhamentos pendentes.
+  static Future<void> cancelarAcompanhamentosDeRemedio() async {
+    try {
+      await init();
+      final pendentes = await _plugin.pendingNotificationRequests();
+      for (final p in pendentes) {
+        if (p.payload == payloadAcompanhamentoRemedio) await _plugin.cancel(p.id);
+      }
+    } catch (_) {}
+  }
 
   /// Constrói frase natural para o TTS de alerta.
   /// Usa vírgula para criar pausa e soar mais humano.
@@ -178,6 +336,17 @@ class NotificationService {
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
 
+    // App aberto do zero por um toque no acompanhamento de remédio: o
+    // callback acima não roda nesse caso — guarda o pedido pra tela
+    // Melhor Idade abrir a Molly quando montar.
+    try {
+      final lancamento = await _plugin.getNotificationAppLaunchDetails();
+      if ((lancamento?.didNotificationLaunchApp ?? false) &&
+          lancamento?.notificationResponse?.payload == payloadAcompanhamentoRemedio) {
+        _abrirMollyPendente = true;
+      }
+    } catch (_) {}
+
     _initialized = true;
   }
 
@@ -187,6 +356,14 @@ class NotificationService {
     if (perfil != 'Melhor Idade') return;
 
     final payload = response.payload ?? '';
+
+    // TAREFA 23: acompanhamento de remédio → a tela Melhor Idade abre a
+    // Molly, que pergunta "Você conseguiu tomar?" e ouve a resposta.
+    if (payload == payloadAcompanhamentoRemedio) {
+      _abrirMollyPendente = true;
+      pedidosAbrirMolly.value++;
+      return;
+    }
 
     // TAREFA 13 do prompt mestre (briefing matinal): antes disso, tocar
     // na notificação das 8h fazia o app falar o payload cru capitalizado
@@ -230,11 +407,23 @@ class NotificationService {
     required String title,
     required String body,
     required DateTime scheduledDate,
+    // `false` no "lembra de novo" da Molly — senão o próprio relembrete
+    // ganharia outro acompanhamento (notificação demais).
+    bool acompanharRemedio = true,
   }) async {
     await init();
 
     // Não agenda no passado
     if (scheduledDate.isBefore(DateTime.now())) return;
+
+    if (acompanharRemedio) {
+      await agendarAcompanhamentoRemedio(
+        idLembrete: id,
+        title: title,
+        body: body,
+        horarioLembrete: scheduledDate,
+      );
+    }
 
     final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
 
@@ -275,6 +464,8 @@ class NotificationService {
   static Future<void> cancel(int id) async {
     _voiceTimers.remove(id)?.cancel();
     await _plugin.cancel(id);
+    // Lembrete apagado/editado: o acompanhamento de remédio vai junto.
+    await _plugin.cancel(idAcompanhamento(id));
   }
 
   /// Cancela todas as notificações agendadas.
@@ -292,6 +483,12 @@ class NotificationService {
   static Future<void> scheduleMorningBriefing() async {
     await init();
     const id = 8000;
+    // TAREFA 24 (Configurações da Molly): "Briefing diário: NÃO" cancela o
+    // agendamento em vez de criar — chamar de novo após ligar reagenda.
+    if (!await SettingsService.getBriefingDiario()) {
+      await _plugin.cancel(id);
+      return;
+    }
     final now = DateTime.now();
     var next = DateTime(now.year, now.month, now.day, 8, 0);
     if (!next.isAfter(now)) next = next.add(const Duration(days: 1));

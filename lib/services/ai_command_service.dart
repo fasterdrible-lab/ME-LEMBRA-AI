@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'settings_service.dart';
+
 /// Uma troca (usuário + assistente) já concluída na conversa atual.
 /// Usada para dar memória de curto prazo ao backend de IA entre turnos.
 class ConversaTurno {
@@ -97,6 +99,9 @@ class AiCommandService {
       final historicoLimitado = historico.length > 3
           ? historico.sublist(historico.length - 3)
           : historico;
+      // TAREFA 15/24: o backend só conversa no tom de "Modo Companhia"
+      // (histórias, papo mais longo) quando o usuário ligou essa opção.
+      final modoCompanhia = await SettingsService.getMollyModoCompanhia();
 
       final response = await http
           .post(
@@ -110,6 +115,7 @@ class AiCommandService {
               'contexto': {
                 'agora': DateTime.now().toIso8601String(),
                 'lembretes': lembretesContexto,
+                'modo_companhia': modoCompanhia,
               },
               'historico': historicoLimitado
                   .map((t) => {'usuario': t.usuario, 'assistente': t.assistente})

@@ -1,14 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:me_lembra_ai/features/molly/services/molly_proactive_service.dart';
 import 'package:me_lembra_ai/models/reminder.dart';
+import 'package:me_lembra_ai/services/notification_service.dart';
 
-/// Testes da proatividade da MOLLY (Fase 8 do prompt mestre): avisar
-/// remédio atrasado sem o usuário precisar perguntar. Só cobre
-/// [MollyProactiveService.gerarAviso] — a versão pura, que recebe a lista
-/// já pronta e nunca toca `FirebaseAuth`/Firestore (mesmo padrão de
-/// `MollyBriefingService.gerarDeLista`, achado da Tarefa 10: o primeiro
-/// acesso a `FirebaseAuth.instance` num processo de teste não tem mock
-/// completo neste projeto).
+/// Proatividade da MOLLY (TAREFA 23 do prompt mestre): remédio atrasado há
+/// 15 min → "Você conseguiu tomar seu remédio?" → se não, "Quer que eu
+/// lembre novamente?". Só as partes puras — [MollyProactiveService.gerarAviso]
+/// e [MollyProactiveService.classificarResposta] nunca tocam
+/// `FirebaseAuth`/Firestore/plugins (achado da Tarefa 10: sem mock completo).
 void main() {
   final agora = DateTime(2026, 8, 28, 10, 0);
 
@@ -32,52 +31,90 @@ void main() {
       );
 
   group('MollyProactiveService.gerarAviso', () {
-    test('avisa quando um remédio de hoje está atrasado há mais de 30 min', () {
-      final lista = [remedio(dateTime: DateTime(2026, 8, 28, 8, 0))];
-      final aviso = MollyProactiveService.gerarAviso(lista, agora: agora);
-      expect(aviso, isNotNull);
-      expect(aviso, contains('Losartana'));
-      expect(aviso, contains('Já tomou?'));
+    test('15 min de atraso: pergunta se conseguiu tomar (frase da TAREFA 23)', () {
+      final lista = [remedio(dateTime: DateTime(2026, 8, 28, 9, 45))];
+      final aviso = MollyProactiveService.gerarAviso(lista, agora: agora)!;
+      expect(aviso.pergunta, 'Você conseguiu tomar Losartana, das 9 horas e 45 minutos?');
+      expect(aviso.lembrete.title, 'Losartana');
     });
 
-    test('não avisa quando o remédio já foi confirmado', () {
+    test('não pergunta com menos de 15 min de atraso', () {
+      final lista = [remedio(dateTime: DateTime(2026, 8, 28, 9, 50))];
+      expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNull);
+    });
+
+    test('não pergunta quando o remédio já foi confirmado', () {
       final lista = [remedio(dateTime: DateTime(2026, 8, 28, 8, 0), confirmed: true)];
       expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNull);
     });
 
-    test('não avisa quando o atraso é menor que o mínimo (30 min)', () {
-      final lista = [remedio(dateTime: DateTime(2026, 8, 28, 9, 45))];
-      expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNull);
-    });
-
-    test('não avisa pra lembrete de outro tipo (ex.: Consulta)', () {
+    test('não pergunta pra lembrete de outro tipo (ex.: Consulta)', () {
       final lista = [remedio(dateTime: DateTime(2026, 8, 28, 8, 0), type: 'Consulta')];
       expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNull);
     });
 
-    test('não avisa pra remédio de outro dia (ontem)', () {
+    test('não pergunta pra remédio de outro dia (ontem)', () {
       final lista = [remedio(dateTime: DateTime(2026, 8, 27, 8, 0))];
       expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNull);
     });
 
-    test('reconhece o tipo "Tomar" (água) também', () {
+    test('reconhece o tipo "Tomar" também', () {
       final lista = [remedio(dateTime: DateTime(2026, 8, 28, 8, 0), type: 'Tomar', title: 'Água')];
       expect(MollyProactiveService.gerarAviso(lista, agora: agora), isNotNull);
     });
 
-    test('com mais de um atrasado, cita a quantidade e o mais antigo', () {
+    test('com mais de um atrasado, cita a quantidade e pergunta do mais antigo', () {
       final lista = [
         remedio(dateTime: DateTime(2026, 8, 28, 9, 0), title: 'Vitamina D'),
         remedio(dateTime: DateTime(2026, 8, 28, 8, 0), title: 'Losartana'),
       ];
-      final aviso = MollyProactiveService.gerarAviso(lista, agora: agora);
-      expect(aviso, contains('2 remédios'));
-      expect(aviso, contains('Losartana'));
-      expect(aviso, isNot(contains('Vitamina D')));
+      final aviso = MollyProactiveService.gerarAviso(lista, agora: agora)!;
+      expect(aviso.pergunta, contains('2 remédios'));
+      expect(aviso.pergunta, contains('Losartana'));
+      expect(aviso.pergunta, isNot(contains('Vitamina D')));
+      expect(aviso.lembrete.title, 'Losartana');
     });
 
     test('lista vazia não gera aviso', () {
       expect(MollyProactiveService.gerarAviso(const [], agora: agora), isNull);
+    });
+  });
+
+  group('MollyProactiveService.classificarResposta', () {
+    test('sim', () {
+      for (final f in ['sim', 'tomei', 'já tomei', 'tomei sim', 'Sim, tomei agora', 'pode lembrar', 'quero']) {
+        expect(MollyProactiveService.classificarResposta(f), RespostaSimNao.sim, reason: f);
+      }
+    });
+
+    test('não — e "não tomei" nunca vira sim', () {
+      for (final f in ['não', 'ainda não', 'não tomei', 'nao tomei ainda', 'esqueci', 'não precisa']) {
+        expect(MollyProactiveService.classificarResposta(f), RespostaSimNao.nao, reason: f);
+      }
+    });
+
+    test('"assim" não contém "sim"; outro assunto vira pedido normal', () {
+      expect(MollyProactiveService.classificarResposta('assim mesmo'), RespostaSimNao.outra);
+      expect(MollyProactiveService.classificarResposta('que horas são'), RespostaSimNao.outra);
+      expect(MollyProactiveService.classificarResposta(''), RespostaSimNao.outra);
+    });
+  });
+
+  group('NotificationService — ids e deteccao de remedio', () {
+    test('acompanhamento e relembrete nao colidem com o lembrete nem com o bom dia', () {
+      final id = NotificationService.idDoLembrete('Losartana', DateTime(2026, 8, 28, 8));
+      final acompanhamento = NotificationService.idAcompanhamento(id);
+      expect(acompanhamento, isNot(id));
+      expect(acompanhamento, isNot(8000));
+      expect(acompanhamento, greaterThanOrEqualTo(0));
+      expect(NotificationService.idRelembrar('abc', 0), isNot(NotificationService.idRelembrar('abc', 1)));
+    });
+
+    test('remedio sim, agua nao ("Tomar" = "Hora de tomar água!")', () {
+      expect(NotificationService.pareceRemedio('Remedio', 'Losartana'), isTrue);
+      expect(NotificationService.pareceRemedio('\u{1F48A} Hora do remédio!', 'Losartana'), isTrue);
+      expect(NotificationService.pareceRemedio('\u{1F4A7} Hora de tomar água!', 'Água'), isFalse);
+      expect(NotificationService.pareceRemedio('Consulta', 'Dentista'), isFalse);
     });
   });
 }

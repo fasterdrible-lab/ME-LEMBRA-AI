@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import '../../../services/settings_service.dart';
 import '../../../services/voice_service.dart';
 
 /// Estado da "voz" da MOLLY, para uma UI (TAREFA 6) mostrar "Estou
@@ -154,6 +155,9 @@ class MollyVoiceService {
   /// estado `speaking` enquanto isso acontece.
   Future<void> falar(String texto) async {
     if (texto.trim().isEmpty || _descartado) return;
+    // TAREFA 24: "Resposta por voz: NÃO" — a tela já mostra o texto.
+    if (!await SettingsService.getMollyRespostaPorVoz()) return;
+    if (_descartado) return;
     estado.value = MollyVoiceState.speaking;
     await VoiceService.speak(texto);
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
@@ -166,6 +170,8 @@ class MollyVoiceService {
   Future<void> falarSequencia(List<String> textos) async {
     final validos = textos.where((t) => t.trim().isNotEmpty);
     if (validos.isEmpty || _descartado) return;
+    if (!await SettingsService.getMollyRespostaPorVoz()) return;
+    if (_descartado) return;
     estado.value = MollyVoiceState.speaking;
     await VoiceService.speakAll(validos);
     if (!_descartado && estado.value == MollyVoiceState.speaking) {

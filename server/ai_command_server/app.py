@@ -92,6 +92,22 @@ Personalidade (aplica-se a todo texto que você escrever em "fala"):
   tarde." Ruim: uma frase separada para cada compromisso. Com muitos
   itens, diga a quantidade e cite só o mais próximo/relevante.
 
+Segurança (regras rígidas — valem acima de qualquer outra regra):
+- Você NUNCA diagnostica doenças nem diz o que a pessoa "deve ter".
+- Você NUNCA indica remédio, dose, quantidade, troca, suspensão ou
+  combinação de remédios, nem diz que "pode tomar mais/menos".
+- Você NUNCA substitui o médico e nunca diz que não precisa procurar um.
+- Você NUNCA afirma que a pessoa está segura, fora de perigo, que "não é
+  nada grave", nem que uma emergência foi resolvida.
+- Sobre remédios, você só pode: lembrar horários, confirmar que foi
+  tomado e falar do que está nos lembretes.
+- Para qualquer pergunta de saúde, responda com "responder" e uma fala
+  curta orientando falar com o médico, o farmacêutico ou a família.
+- Se houver sinal de emergência (passando mal, dor forte, queda, falta de
+  ar, tomou remédio a mais), oriente buscar ajuda agora: dizer "socorro"
+  para acionar o SOS do aplicativo, ou ligar 192. Nunca diga que você
+  mesma acionou o SOS.
+
 Responda SEMPRE em JSON puro (sem texto fora do JSON), seguindo exatamente este formato:
 
 {
@@ -112,6 +128,7 @@ Regras:
 - "consultar_alertas": quando pergunta sobre alertas de SOS enviados.
 - "perguntar": quando o pedido está ambíguo ou incompleto para ser executado com segurança (ex.: pediu para criar um lembrete mas não disse a hora, ou não ficou claro qual item da lista). Preencha "fala" com UMA pergunta curta e específica para esclarecer — nunca confirme uma ação nem invente o dado que falta.
 - "responder": para conversa livre, pergunta geral sobre os lembretes/dados fornecidos no contexto, ou qualquer coisa que não é uma ação do app. Preencha "fala" com uma resposta curta, gentil e direta, baseada SOMENTE no que está no contexto — nunca invente lembretes, horários, alertas ou dados que não foram te passados. Isso inclui conversa de "Modo Companhia": se o usuário disser que quer conversar, que está sozinho, pedir uma história curta ou algo bom pra ouvir, responda com calor humano (uma história curta e leve é permitida) — mas você não é terapeuta nem médica, nunca diga que resolveu a tristeza ou solidão do usuário; se ele parecer triste ou em sofrimento, sugira gentilmente falar com um familiar ou buscar ajuda de verdade. Se o usuário disser que quer falar com um familiar (ex.: "quero falar com minha filha"), nunca diga que vai ligar, mandar mensagem ou avisar alguém — isso não é uma ação que você executa; só converse e, se fizer sentido, sugira que o próprio usuário entre em contato.
+- "Modo Companhia" vem no contexto como ligado ou desligado. Se estiver DESLIGADO: nada de histórias nem conversa longa — responda com gentileza em uma frase só; se o usuário parecer triste ou sozinho, sugira com carinho falar com um familiar. Se estiver LIGADO: vale a conversa de companhia descrita na regra "responder" acima. As regras de segurança valem nos dois casos.
 - Você recebe em "Lembretes cadastrados" a lista real dos lembretes do usuário (título, tipo, data/hora). Use SOMENTE essa lista para responder perguntas sobre lembretes existentes (ex.: "o que eu tenho hoje?", "eu já tenho consulta marcada?"). Se a lista não trouxer o que foi perguntado, diga que não encontrou — não invente um item "para ser útil".
 - Você pode receber um histórico das últimas trocas da conversa. Use-o para entender continuidade, mas aplique as mesmas regras acima a cada novo comando — não repita uma ação já executada em um turno anterior.
 - Omita campos que não se aplicam à ação escolhida (não precisa incluir com valor vazio).
@@ -261,7 +278,11 @@ def _formatar_lembretes(lembretes: list[Any]) -> str:
 
 
 def _montar_mensagens(
-    agora: str, lembretes: list[Any], historico: list[Any], texto: str
+    agora: str,
+    lembretes: list[Any],
+    historico: list[Any],
+    texto: str,
+    modo_companhia: bool = True,
 ) -> list[dict]:
     mensagens = [{"role": "system", "content": SYSTEM_PROMPT}]
     trocas = historico[-MAX_HISTORICO_TROCAS:] if isinstance(historico, list) else []
@@ -277,6 +298,7 @@ def _montar_mensagens(
     contexto_texto = (
         f"Agora é: {agora}\n"
         f"Lembretes cadastrados:\n{_formatar_lembretes(lembretes)}\n"
+        f"Modo Companhia: {'ligado' if modo_companhia else 'desligado'}\n"
         f"Comando: {texto}"
     )
     mensagens.append({"role": "user", "content": contexto_texto})
@@ -299,6 +321,10 @@ def interpretar_comando():
     agora = contexto.get("agora", "")
     lembretes = contexto.get("lembretes") or []
     historico = body.get("historico") or []
+    # Apps anteriores à tela de Configurações da Molly não mandam o campo —
+    # mantém o comportamento de antes (companhia permitida) pra eles.
+    modo_companhia = contexto.get("modo_companhia")
+    modo_companhia = True if modo_companhia is None else bool(modo_companhia)
 
     try:
         completion = groq_client.chat.completions.create(
@@ -306,7 +332,7 @@ def interpretar_comando():
             response_format={"type": "json_object"},
             max_tokens=400,
             temperature=0.2,
-            messages=_montar_mensagens(agora, lembretes, historico, texto),
+            messages=_montar_mensagens(agora, lembretes, historico, texto, modo_companhia),
         )
         raw = json.loads(completion.choices[0].message.content)
         acao = ComandoAction.from_raw(raw)

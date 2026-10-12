@@ -62,6 +62,26 @@ class ReminderService {
 
     await _col.doc(id).update({'confirmed': true});
 
+    // TAREFA 23: remédio confirmado — some com "Você conseguiu tomar?" e
+    // com os "lembra de novo" pendentes (sem notificação à toa).
+    if (reminderData != null) {
+      try {
+        final title = reminderData['title'] as String? ?? '';
+        final dt = reminderData['dateTime'];
+        final dateTime = dt is Timestamp ? dt.toDate() : (dt is DateTime ? dt : null);
+        if (dateTime != null) {
+          await NotificationService.remedioConfirmado(
+            idLembrete: NotificationService.idDoLembrete(title, dateTime),
+            title: title,
+            horarioLembrete: dateTime,
+            repeat: reminderData['repeat'] as String? ?? 'unico',
+            tipo: reminderData['type'] as String? ?? '',
+          );
+        }
+        await NotificationService.cancelarRelembretes(id);
+      } catch (_) {}
+    }
+
     // Notificar familiares vinculados (nao bloqueia em caso de erro)
     if (reminderData != null) {
       try {

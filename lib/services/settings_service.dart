@@ -127,4 +127,46 @@ class SettingsService {
       (await SharedPreferences.getInstance()).getInt(_kSosCountdownSegundos) ?? 5;
   static Future<void> setSosCountdownSegundos(int v) async =>
       (await SharedPreferences.getInstance()).setInt(_kSosCountdownSegundos, v);
+
+  // TAREFA 24 do prompt mestre da MOLLY: opções da tela "Configurações da
+  // Molly" (molly_settings_screen.dart). Padrões = comportamento que já
+  // estava em produção antes da tela existir (nada muda pra quem não mexer).
+
+  /// "Molly ativa" — desligada, o botão "Assistente Molly" some da tela
+  /// Melhor Idade. Padrão `true` (a Molly é o assistente de produção).
+  static const _kMollyAtiva = 'cfg_molly_ativa';
+  static Future<bool> getMollyAtiva() async =>
+      (await SharedPreferences.getInstance()).getBool(_kMollyAtiva) ?? true;
+  static Future<void> setMollyAtiva(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kMollyAtiva, v);
+
+  /// "Resposta por voz" — desligada, a Molly só mostra a resposta escrita.
+  static const _kMollyRespostaPorVoz = 'cfg_molly_resposta_voz';
+  static Future<bool> getMollyRespostaPorVoz() async =>
+      (await SharedPreferences.getInstance()).getBool(_kMollyRespostaPorVoz) ?? true;
+  static Future<void> setMollyRespostaPorVoz(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kMollyRespostaPorVoz, v);
+
+  /// "Velocidade da voz: Lenta" — vale pra toda fala do app (`VoiceService`),
+  /// não só a Molly. Padrão `false` (Normal).
+  static const _kVozLenta = 'cfg_voz_lenta';
+  static Future<bool> getVozLenta() async =>
+      (await SharedPreferences.getInstance()).getBool(_kVozLenta) ?? false;
+  static Future<void> setVozLenta(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kVozLenta, v);
+
+  /// Avisos por conta própria da Molly (hoje: remédio atrasado ao abrir —
+  /// `MollyProactiveService`). É o `mollyProactiveEnabled` da TAREFA 35.
+  static const _kMollyAvisosProativos = 'cfg_molly_avisos_proativos';
+  static Future<bool> getMollyAvisosProativos() async =>
+      (await SharedPreferences.getInstance()).getBool(_kMollyAvisosProativos) ?? true;
+  static Future<void> setMollyAvisosProativos(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kMollyAvisosProativos, v);
+
+  /// Notificação de bom dia às 8h (`NotificationService.scheduleMorningBriefing`).
+  static const _kBriefingDiario = 'cfg_briefing_diario';
+  static Future<bool> getBriefingDiario() async =>
+      (await SharedPreferences.getInstance()).getBool(_kBriefingDiario) ?? true;
+  static Future<void> setBriefingDiario(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kBriefingDiario, v);
 }

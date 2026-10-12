@@ -420,17 +420,24 @@ class _ConfigScreenState extends State<ConfigScreen> {
               ),
             ])),
             const SizedBox(height: 16),
-            // TESTE TEMPORÁRIO (sessão 24): atalho pra validar a tela /molly
-            // no aparelho físico antes de decidir a migração real do botão
-            // "Falar Comando" (ver docs/MOLLY_ARCHITECTURE_ANALYSIS.md,
-            // seção 5). Remover quando a validação terminar.
-            _secao('MOLLY (PRÉVIA — TESTE)'),
+            // Sessão 24 nasceu como atalho de teste; desde a migração (MOLLY-22)
+            // a Molly já é o assistente de produção — mantido como acesso à
+            // versão em tela cheia (/molly, com a lista "Hoje").
+            _secao('MOLLY'),
             _card(child: ListTile(
               leading: const CircleAvatar(backgroundColor: Color(0xFFEDE7F6), child: Icon(Icons.auto_awesome, color: Color(0xFF7B5EA7))),
-              title: const Text('Abrir Molly (beta)', style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Prévia da assistente nova — ainda não substitui o Falar Comando'),
+              title: const Text('Abrir Molly', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Assistente Molly em tela cheia, com os lembretes de hoje'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.pushNamed(context, '/molly'),
+            )),
+            const SizedBox(height: 8),
+            _card(child: ListTile(
+              leading: const CircleAvatar(backgroundColor: Color(0xFFEDE7F6), child: Icon(Icons.tune, color: Color(0xFF7B5EA7))),
+              title: const Text('Configurações da Molly', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Voz, memória, companhia e avisos'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, '/molly-settings'),
             )),
             const SizedBox(height: 16),
             _secao('NOTIFICACOES'),

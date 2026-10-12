@@ -25,7 +25,7 @@ class _AboutScreenState extends State<AboutScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _versao = info.version);
     } catch (_) {
-      if (mounted) setState(() => _versao = '1.3.0');
+      if (mounted) setState(() => _versao = '1.5.2');
     }
   }
 
@@ -65,7 +65,7 @@ class _AboutScreenState extends State<AboutScreen> {
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
-                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.3.0',
+                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.5.2',
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
@@ -88,14 +88,53 @@ class _AboutScreenState extends State<AboutScreen> {
             color: _primary,
             titulo: 'Perfil Melhor Idade',
             itens: [
+              'Assistente Molly: toque no botão e fale. A Molly cria lembretes, lê seus compromissos e cuida da lista de compras (veja "Assistente Molly" abaixo).',
               'Botão SOS: pressione para acionar emergência. Um contador de 5 segundos permite cancelar se acionado por engano.',
               '5 toques rápidos em qualquer lugar da tela também disparam o SOS.',
-              'Criar lembrete por voz: toque em "Criar lembrete por voz" e diga o lembrete em voz alta. O app detecta data, hora e tipo automaticamente.',
-              'Ouvir lembretes: toque em "Ouvir lembretes de hoje" para escutar todos os compromissos do dia.',
               'Meus Lembretes: visualize lembretes organizados por categoria (remédios, consultas, aniversários, mercado, eventos).',
+              'Chat Familiar: converse com sua família por texto ou áudio.',
               'Minha Localização: abre o mapa com sua posição atual.',
               'Meus Veículos: gerencie documentos e alertas do seu veículo.',
-              'Meus Alertas SOS: veja o histórico de emergências e confirme que o familiar recebeu.',
+              'Detector de queda: se o celular perceber uma queda, o SOS é acionado sozinho. Para funcionar com o app fechado, ligue o Modo Proteção.',
+            ],
+          ),
+
+          _manualTile(
+            icon: Icons.mic_none,
+            color: _primary,
+            titulo: 'Assistente Molly',
+            itens: [
+              'Toque em "Assistente Molly". Ela já começa a ouvir, sem precisar trocar de tela.',
+              'Criar lembrete: "Me lembra do remédio às oito", "Consulta dia 15 às 14 horas", "Ligar para a Maria todo dia às 10".',
+              'Se faltar o dia ou a hora, a Molly pergunta: "Para qual dia?" ou "Que horas?". É só responder.',
+              'Repetição: diga "todo dia" ou "toda segunda" para o lembrete se repetir.',
+              'Ouvir lembretes: "Quais são meus lembretes de hoje?". Ela resume em poucas frases.',
+              'Lista de compras: "Adiciona leite na lista de compras".',
+              'Outros pedidos: "Que horas são?", "Meus alertas", "Confirmar remédio", "Quem é meu contato de emergência?".',
+              '"Ligar para (nome)": a Molly pede confirmação e avisa o familiar pelo chat.',
+              'Família: "Avisa a Ana que estou bem", "Manda mensagem pro Pedro" (ela pergunta o que dizer), "Quem está acompanhando meus lembretes?".',
+              'Se você disser "minha filha" e tiver mais de um familiar vinculado, a Molly pede o nome.',
+              'Remédio atrasado: 15 minutos depois do horário, chega o aviso "Você conseguiu tomar seu remédio?". Toque nele e responda à Molly. Se disser "não", ela oferece lembrar de novo (no máximo 2 vezes por dia).',
+              'Remédios: "Já tomei meu remédio hoje?" diz o que foi marcado como tomado e qual é o próximo.',
+              'A Molly não é médica: nunca indica remédio ou dose nem diz que doença você tem. Para isso, fale com seu médico, o farmacêutico ou a família.',
+              'Para encerrar a conversa, diga "obrigado" ou "pode parar".',
+              'Dizer "SOCORRO" aciona o SOS na hora, mesmo sem internet.',
+              'Frases como "me ajuda" ou "estou passando mal" mostram uma contagem com o botão Cancelar antes de acionar o SOS.',
+              'Os comandos principais (socorro, lembretes de hoje, que horas são) funcionam mesmo sem internet.',
+            ],
+          ),
+
+          _manualTile(
+            icon: Icons.shield,
+            color: _danger,
+            titulo: 'Modo Proteção',
+            itens: [
+              'Mantém o detector de queda funcionando mesmo com o app fechado.',
+              'Enquanto estiver ligado, aparece a notificação fixa "Modo proteção ativo". Ela precisa ficar lá: é ela que permite o app continuar vigiando.',
+              'Se uma queda for detectada com o app fechado, o SOS é acionado direto, sem a contagem de cancelamento: pega a localização, avisa a família pelo chat e liga para o primeiro contato de emergência.',
+              'Com o app aberto, a queda mostra antes a contagem de 5 segundos com o botão Cancelar.',
+              'Ligue ou desligue em Configurações → Modo Proteção.',
+              'O SOS por teclas de volume continua funcionando só com o app aberto.',
             ],
           ),
 
@@ -127,10 +166,11 @@ class _AboutScreenState extends State<AboutScreen> {
             color: const Color(0xFFFFB300),
             titulo: 'Perfil Família',
             itens: [
-              'Vincular familiar: toque em "Adicionar" e insira o código de convite do idoso ou criança.',
+              'Vincular familiar: em "Adicionar familiar", digite o código de convite do idoso ou da criança.',
               'Feed SOS: receba alertas em tempo real quando um familiar acionar o SOS.',
               'Monitoramento: veja a adesão a lembretes e histórico de alertas de cada monitorado.',
-              'Chat: envie mensagens de texto ou segure o botão de microfone para gravar um áudio.',
+              'Chat: envie mensagens de texto, ou toque no microfone para começar a gravar um áudio e toque de novo para enviar.',
+              'Mensagens que você enviou podem ser apagadas segurando o dedo sobre elas.',
             ],
           ),
 
@@ -141,7 +181,9 @@ class _AboutScreenState extends State<AboutScreen> {
             itens: [
               'Ao acionar o SOS, o app registra sua localização GPS, envia mensagem no chat familiar e liga automaticamente para o contato principal.',
               'Se houver mais de um contato cadastrado, um botão extra aparece para ligar para os demais.',
+              'Antes de disparar, aparece uma contagem de 5 segundos com o botão CANCELAR.',
               'Quando o familiar abre a tela de monitoramento, o alerta é marcado como "visualizado".',
+              'Para saber dos seus alertas, pergunte à Molly: "meus alertas".',
               'Configure o número de emergência em Configurações → Botão de Pânico.',
               'É possível cadastrar até 3 contatos de emergência.',
               'SOS por teclas: ative em Configurações → SOS por Teclas e pressione o volume 5 vezes seguidas.',
@@ -153,7 +195,7 @@ class _AboutScreenState extends State<AboutScreen> {
             color: const Color(0xFF00897B),
             titulo: 'Lembretes',
             itens: [
-              'Criar: toque no botão "+" ou use o comando de voz (perfil idoso).',
+              'Criar: toque no botão "+" ou peça à Assistente Molly (perfil Melhor Idade).',
               'Categorias: Remédio, Consulta, Aniversário, Mercado, Reunião, Tomar.',
               'Repetição: único, diário ou semanal.',
               'Notificações chegam no horário agendado mesmo com o app fechado.',
@@ -184,7 +226,10 @@ class _AboutScreenState extends State<AboutScreen> {
               'Meu nome: defina o nome exibido para familiares.',
               'Trocar perfil: mude de perfil sem sair da conta.',
               'Número de emergência: configure até 3 contatos SOS.',
-              'Modo Proteção: mantém o app ativo em segundo plano para receber alertas SOS.',
+              'Modo Proteção: mantém o detector de queda funcionando com o app fechado (veja "Modo Proteção" acima).',
+              'Abrir Molly: abre a Assistente Molly em tela cheia, com a lista de lembretes de hoje.',
+              'Configurações da Molly: liga ou desliga a Molly, a resposta por voz, a memória, o modo companhia, os avisos e o bom dia às 8h. Também escolhe a velocidade da voz (lenta ou normal).',
+              'Notificações: liga ou desliga os alertas de lembretes.',
               'SOS por Teclas: pressione volume 5 vezes para disparar SOS com app aberto.',
               'Modo Escuro: alterna entre tema claro e escuro.',
               'Sair da conta: encerra a sessão atual.',

@@ -2,7 +2,9 @@ import '../../../models/reminder.dart';
 import '../../../services/reminder_service.dart';
 import '../../../services/sos_service.dart';
 import '../models/molly_tool_result.dart';
+import '../tools/family_tool.dart';
 import '../tools/molly_fala_utils.dart';
+import 'molly_family_intent.dart';
 import 'molly_risk_policy.dart';
 
 /// Os cinco comandos críticos reconhecidos localmente (TAREFA 17 do
@@ -17,6 +19,8 @@ enum OfflineIntent {
   meusLembretes,
   ligarPara,
   confirmarRemedio,
+  contatoEmergencia,
+  familia,
   nenhuma,
 }
 
@@ -74,10 +78,14 @@ class OfflineIntentService {
 
     if (t.toUpperCase().contains('SOCORRO')) return OfflineIntent.socorro;
     if (_pareceEmergenciaSuave(tLower)) return OfflineIntent.possivelEmergencia;
+    // TAREFA 20 — antes de "meus lembretes": "quem acompanha meus
+    // lembretes?" é pergunta de família, não pedido pra ouvir os lembretes.
+    if (MollyFamilyIntent.classificar(t) != null) return OfflineIntent.familia;
     if (_ehQueHoras(tLower)) return OfflineIntent.queHoras;
     if (_ehMeusLembretes(tLower)) return OfflineIntent.meusLembretes;
     if (_extrairLigarPara(tLower) != null) return OfflineIntent.ligarPara;
     if (_ehConfirmarRemedio(tLower)) return OfflineIntent.confirmarRemedio;
+    if (_ehContatoEmergencia(tLower)) return OfflineIntent.contatoEmergencia;
     return OfflineIntent.nenhuma;
   }
 
@@ -99,6 +107,10 @@ class OfflineIntentService {
         return MollyRiskPolicy.executar('callFamilyMember', {'nomeFamiliar': nome});
       case OfflineIntent.confirmarRemedio:
         return _confirmarRemedio();
+      case OfflineIntent.contatoEmergencia:
+        return MollyRiskPolicy.executar('getEmergencyContacts', const {});
+      case OfflineIntent.familia:
+        return _executarFamilia(MollyFamilyIntent.classificar(texto.trim())!);
       case OfflineIntent.nenhuma:
         return null;
     }
@@ -223,6 +235,54 @@ class OfflineIntentService {
   static bool _ehConfirmarRemedio(String t) =>
       (t.contains('confirmar') || t.contains('confirma')) &&
       (t.contains('remédio') || t.contains('remedio') || t.contains('medicamento'));
+
+  /// TAREFA 20 (integração com família). Mensagem sem conteúdo ("manda
+  /// mensagem pro meu filho") devolve uma pergunta com `coletar_mensagem`
+  /// e o nome já resolvido em `dados` — o painel ouve a resposta e manda.
+  static Future<MollyToolResult> _executarFamilia(MollyFamilyCommand cmd) async {
+    switch (cmd.tipo) {
+      case MollyFamilyIntentTipo.listarFamilia:
+        return MollyRiskPolicy.executar('getFamilyMembers', const {});
+      case MollyFamilyIntentTipo.quemAcompanha:
+        return MollyRiskPolicy.executar('getCaregivers', const {});
+      case MollyFamilyIntentTipo.avisar:
+      case MollyFamilyIntentTipo.mensagem:
+        if (cmd.mensagem != null && cmd.mensagem!.isNotEmpty) {
+          return MollyRiskPolicy.executar('sendFamilyMessage', {
+            'nomeFamiliar': cmd.destino!,
+            'mensagem': cmd.mensagem!,
+          });
+        }
+        final resolucao = await FamilyTool.resolver(cmd.destino!);
+        final membro = resolucao.membro;
+        if (membro == null) {
+          return MollyToolResult.falha(resolucao.falaProblema!, acao: 'sendFamilyMessage');
+        }
+        return MollyToolResult(
+          sucesso: true,
+          precisaEsclarecimento: true,
+          fala: 'O que você quer dizer para ${membro.nome}?',
+          acao: 'coletar_mensagem',
+          dados: {'nomeFamiliar': membro.nome},
+        );
+    }
+  }
+
+  /// "Quem é meu contato de emergência?" e variações (critério de aceitação,
+  /// TAREFA 37). Exige uma palavra de contato + uma de emergência/SOS. Um
+  /// pedido de ligação ("liga para meu contato de emergência") não é
+  /// pergunta — fica de fora aqui e segue o caminho de [_extrairLigarPara].
+  static bool _ehContatoEmergencia(String t) {
+    if (RegExp(r'\blig(a|ar|ue)\b').hasMatch(t)) return false;
+    final temContato = t.contains('contato') ||
+        t.contains('número') ||
+        t.contains('numero') ||
+        t.contains('telefone');
+    final temEmergencia = t.contains('emergência') ||
+        t.contains('emergencia') ||
+        RegExp(r'\bsos\b').hasMatch(t);
+    return temContato && temEmergencia;
+  }
 
   /// Confirma o remédio de hoje mais relevante. Se houver mais de um
   /// candidato (mais de um remédio ainda não confirmado hoje), é

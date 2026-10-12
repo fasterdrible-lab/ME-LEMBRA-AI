@@ -45,13 +45,16 @@ class FamilyTool {
   static Future<MollyToolResult> _sendFamilyMessage(Map<String, dynamic> p) async {
     final nomeFamiliar = (p['nomeFamiliar'] as String).trim();
     final mensagem = (p['mensagem'] as String).trim();
-    final membro = await _encontrarFamiliarPorNome(nomeFamiliar);
+    final resolucao = resolverFamiliar(await FamilyService.stream().first, nomeFamiliar);
+    final membro = resolucao.membro;
     if (membro == null) {
-      return MollyToolResult.falha('Não encontrei um familiar chamado $nomeFamiliar.', acao: 'sendFamilyMessage');
+      return MollyToolResult.falha(resolucao.falaProblema!, acao: 'sendFamilyMessage');
     }
     try {
       await ChatService.send(membro.uid, mensagem);
-      return MollyToolResult.sucesso('Mensagem enviada para ${membro.nome}.', acao: 'sendFamilyMessage');
+      // Repete o que foi mandado: o texto veio do reconhecimento de voz e a
+      // pessoa precisa ouvir se saiu certo.
+      return MollyToolResult.sucesso('Mandei para ${membro.nome}: $mensagem', acao: 'sendFamilyMessage');
     } catch (_) {
       return MollyToolResult.falha('Não consegui enviar a mensagem agora.', acao: 'sendFamilyMessage');
     }
@@ -77,9 +80,10 @@ class FamilyTool {
 
   static Future<MollyToolResult> _callFamilyMember(Map<String, dynamic> p) async {
     final nomeFamiliar = (p['nomeFamiliar'] as String).trim();
-    final membro = await _encontrarFamiliarPorNome(nomeFamiliar);
+    final resolucao = resolverFamiliar(await FamilyService.stream().first, nomeFamiliar);
+    final membro = resolucao.membro;
     if (membro == null) {
-      return MollyToolResult.falha('Não encontrei um familiar chamado $nomeFamiliar.', acao: 'callFamilyMember');
+      return MollyToolResult.falha(resolucao.falaProblema!, acao: 'callFamilyMember');
     }
     try {
       final meuNome = await ProfileService.getNameForSelectedProfile() ?? 'Familiar';
@@ -90,18 +94,99 @@ class FamilyTool {
     }
   }
 
-  static Future<FamilyMember?> _encontrarFamiliarPorNome(String nome) async {
-    final membros = await FamilyService.stream().first;
-    final alvo = nome.trim().toLowerCase();
-    if (alvo.isEmpty) return null;
-    for (final m in membros) {
-      if (m.nome.trim().toLowerCase() == alvo) return m;
+  /// "Quem está acompanhando meus lembretes?" (TAREFA 20) — os familiares
+  /// com papel `cuidador` no vínculo (quem usou o código de convite).
+  static final MollyToolDefinition getCaregivers = MollyToolDefinition(
+    nome: 'getCaregivers',
+    descricao: 'Diz quais familiares acompanham os lembretes do usuário (cuidadores).',
+    risco: MollyRiskLevel.low,
+    parametros: const [],
+    executar: (_) async {
+      final membros = await FamilyService.stream().first;
+      return MollyToolResult.sucesso(falaQuemAcompanha(membros), acao: 'getCaregivers');
+    },
+  );
+
+  /// Pura e testável.
+  static String falaQuemAcompanha(List<FamilyMember> membros) {
+    final cuidadores = membros.where((m) => m.papel == 'cuidador').map((m) => m.nome).toList();
+    if (cuidadores.isEmpty) {
+      return 'Ninguém está acompanhando seus lembretes ainda. '
+          'Para isso, um familiar precisa usar o seu código de convite, na tela Família.';
     }
-    // Correspondência parcial (ex.: "Ana" bate com "Ana Paula").
-    for (final m in membros) {
-      final nomeMembro = m.nome.trim().toLowerCase();
-      if (nomeMembro.contains(alvo) || alvo.contains(nomeMembro)) return m;
-    }
-    return null;
+    return cuidadores.length == 1
+        ? '${cuidadores.first} acompanha seus lembretes.'
+        : '${juntarNomes(cuidadores)} acompanham seus lembretes.';
   }
+
+  /// "Ana", "Ana e Pedro", "Ana, Pedro e Rita".
+  static String juntarNomes(List<String> nomes) {
+    if (nomes.isEmpty) return '';
+    if (nomes.length == 1) return nomes.first;
+    return '${nomes.sublist(0, nomes.length - 1).join(', ')} e ${nomes.last}';
+  }
+
+  /// [resolverFamiliar] sobre os familiares vinculados de verdade.
+  static Future<ResolucaoFamiliar> resolver(String alvo) async =>
+      resolverFamiliar(await FamilyService.stream().first, alvo);
+
+  /// Acha o familiar que o usuário quis dizer — puro e testável.
+  ///
+  /// Os familiares só têm nome (o app não guarda parentesco), então
+  /// "minha filha"/"meu filho" só dá certo sozinho quando há um familiar
+  /// vinculado; com mais de um, pede o nome em vez de adivinhar. "minha
+  /// filha Ana" usa o nome que vem depois.
+  static ResolucaoFamiliar resolverFamiliar(List<FamilyMember> membros, String alvoBruto) {
+    if (membros.isEmpty) {
+      return const ResolucaoFamiliar.problema('Você ainda não tem nenhum familiar vinculado.');
+    }
+    final todos = juntarNomes(membros.map((m) => m.nome).toList());
+    var alvo = alvoBruto.trim().toLowerCase().replaceFirst(RegExp(r'^(a|o|pra|pro|para|à|ao)\s+'), '');
+    if (alvo.isEmpty) return const ResolucaoFamiliar.problema('Não entendi para quem.');
+
+    final parentesco = _parentesco.firstMatch(alvo);
+    if (parentesco != null) {
+      final resto = parentesco.group(1)!.trim();
+      if (resto.isEmpty) {
+        if (membros.length == 1) return ResolucaoFamiliar.encontrado(membros.first);
+        return ResolucaoFamiliar.problema('Você tem mais de um familiar: $todos. Diga o nome de quem você quer.');
+      }
+      alvo = resto;
+    }
+
+    for (final m in membros) {
+      if (m.nome.trim().toLowerCase() == alvo) return ResolucaoFamiliar.encontrado(m);
+    }
+    // Parcial por palavra: "Ana" bate com "Ana Paula", mas "a" não bate com tudo.
+    if (alvo.length >= 2) {
+      final parciais = membros.where((m) {
+        final palavras = m.nome.trim().toLowerCase().split(RegExp(r'\s+'));
+        return palavras.contains(alvo) || m.nome.trim().toLowerCase().startsWith(alvo);
+      }).toList();
+      if (parciais.length == 1) return ResolucaoFamiliar.encontrado(parciais.first);
+      if (parciais.length > 1) {
+        final nomes = juntarNomes(parciais.map((m) => m.nome).toList());
+        return ResolucaoFamiliar.problema('Encontrei mais de um: $nomes. Diga o nome completo.');
+      }
+    }
+    return ResolucaoFamiliar.problema('Não encontrei um familiar chamado $alvoBruto. Seus familiares são: $todos.');
+  }
+
+  /// Palavra de parentesco no começo; o que vier depois (grupo 1) é o nome.
+  /// `(?=\s|$)` em vez de `\b` por causa de "irmã" (acento quebra `\b`).
+  static final RegExp _parentesco = RegExp(
+    r'^(?:meu|minha|meus|minhas)?\s*'
+    r'(?:filh[oa]s?|net[oa]s?|espos[oa]|marido|mulher|irmão|irmã|irmao|irma|sobrinh[oa]|genro|nora|'
+    r'cuidador[a]?|família|familia|parente)(?=\s|$)(.*)$',
+  );
+}
+
+/// Resultado de [FamilyTool.resolverFamiliar]: ou o familiar, ou uma fala
+/// curta explicando o problema (nenhum vinculado, ambíguo, não achado).
+class ResolucaoFamiliar {
+  final FamilyMember? membro;
+  final String? falaProblema;
+
+  const ResolucaoFamiliar.encontrado(FamilyMember this.membro) : falaProblema = null;
+  const ResolucaoFamiliar.problema(String this.falaProblema) : membro = null;
 }

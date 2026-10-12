@@ -34,8 +34,10 @@ class MollyToolRegistry {
       FamilyTool.getFamilyMembers,
       FamilyTool.sendFamilyMessage,
       FamilyTool.callFamilyMember,
+      FamilyTool.getCaregivers,
       LocationTool.getCurrentLocation,
       ProfileTool.getUserProfile,
+      ProfileTool.getEmergencyContacts,
     ])
       tool.nome: tool,
   };

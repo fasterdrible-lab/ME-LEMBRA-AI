@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — Me Lembra Aí
 
-> Última atualização: 2026-08-28 (sessão 24, continuação)
+> Última atualização: 2026-10-11 (sessão 25)
 
 ---
 
@@ -71,6 +71,13 @@
 | `me_lembra_ai_idoso` | Lembretes (Idoso) | MAX | **Sim** | Intensa | Lembretes do perfil idoso |
 | `me_lembra_ai_crianca` | Lembretes (Criança) | HIGH | Não | Não | Lembretes do perfil criança |
 | `me_lembra_ai_matinal` | Resumo Matinal | HIGH | Não | Sim | Briefing diário às 8h |
+
+> **Acompanhamento de remédio (sessão 25, TAREFA 23):** no canal
+> `me_lembra_ai_channel`, 15 min depois de cada lembrete de remédio do
+> perfil Melhor Idade, "Você conseguiu tomar seu remédio?" (ID =
+> `idAcompanhamento(idDoLembrete)`, payload `molly_remedio`). Cancelado ao
+> confirmar o remédio, apagar/editar o lembrete ou desligar "Avisos da
+> Molly".
 | `sos_alert` | **Alerta SOS** | **MAX** | **Sim** | Padrão intenso | Alerta SOS no familiar |
 | `sos_protection` | Modo Proteção | LOW | Não | Não | Notificação persistente do Foreground Service |
 
@@ -133,6 +140,12 @@ gravar sem `userApproved: true` explícito **e** sem
 
 > **SharedPreferences (local):** `cfg_molly_memoria_autorizada` (bool,
 > padrão `false`) — "A MOLLY pode lembrar minhas preferências?" (TAREFA 9).
+>
+> **Configurações da Molly (TAREFA 24, sessão 25), todas em SharedPreferences:**
+> `cfg_molly_ativa` (true), `cfg_molly_resposta_voz` (true), `cfg_voz_lenta`
+> (false), `cfg_molly_modo_companhia` (false — enviado ao backend em
+> `contexto.modo_companhia`), `cfg_molly_avisos_proativos` (true),
+> `cfg_briefing_diario` (true).
 
 ### `users/{uid}/family/{otherUid}`
 ```json
@@ -288,7 +301,8 @@ No familiar com app encerrado (via VPS):
 Usuário ativa "Modo Proteção" na ConfigScreen:
   SosProtectionService.start()
     └─ MethodChannel "protection" → SosProtectionService.kt.start(context)
-         └─ startForeground(9001, notification(PRIORITY_LOW, ONGOING))
+         └─ startForeground(9001, notification(PRIORITY_LOW, ONGOING),
+              FOREGROUND_SERVICE_TYPE_HEALTH)   ← API 34+; onTimeout() → stopSelf()
               └─ onStartCommand → startHeadlessFlutterIfNeeded()
                    └─ FlutterEngine(applicationContext) [engine NOVO, headless]
                         ├─ executeDartEntrypoint("fallDetectorEntrypoint")
@@ -489,7 +503,8 @@ ReminderService.stream() emite lista de lembretes
 | `CALL_PHONE` | Ligação direta (ACTION_CALL) no SOS |
 | `FOREGROUND_SERVICE` | Foreground Service geral |
 | `FOREGROUND_SERVICE_LOCATION` | Foreground Service com localização |
-| `FOREGROUND_SERVICE_DATA_SYNC` | Foreground Service de sincronização (SosProtectionService) |
+| `FOREGROUND_SERVICE_HEALTH` | Tipo `health` do SosProtectionService (sessão 25; antes `dataSync`, que tem teto de 6h/24h no Android 15+) |
+| `HIGH_SAMPLING_RATE_SENSORS` | Pré-requisito do Android 14+ para iniciar FGS `health` (concedida na instalação) |
 
 ---
 
@@ -562,7 +577,12 @@ lib/
                                       # SafeArea) em volta de
                                       # widgets/molly_assistant_panel.dart
         molly_memory_screen.dart     # "O que a Molly lembra" (TAREFA 9) —
-                                      # rota /molly-memory, aditiva
+                                      # rota /molly-memory, aberta pelas
+                                      # Configurações da Molly (sessão 25)
+        molly_settings_screen.dart   # Configurações da Molly (TAREFA 24,
+                                      # sessão 25) — rota /molly-settings:
+                                      # ativa, voz, velocidade, memória,
+                                      # companhia, avisos, bom dia às 8h
       widgets/
         molly_assistant_panel.dart   # MollyAssistantPanel (sessão 24) —
                                       # TODA a lógica de conversa/voz/risco/
@@ -613,11 +633,29 @@ lib/
                                       # a coleta de dia/hora funcionar de
                                       # verdade na Molly nova
         molly_proactive_service.dart # MollyProactiveService (sessão 24,
-                                      # Fase 8) — avisa remédio atrasado
-                                      # (>30min, não confirmado) assim que
-                                      # o painel abre, sem o usuário
-                                      # perguntar. gerarAviso() é pura
-                                      # (testável sem Firebase)
+                                      # Fase 8; sessão 25, TAREFA 23) —
+                                      # remédio atrasado ≥15 min: "Você
+                                      # conseguiu tomar?" → não → "Quer que
+                                      # eu lembre novamente?" (máx. 2/dia).
+                                      # Acionado ao abrir o painel ou pela
+                                      # notificação de acompanhamento
+                                      # (NotificationService, payload
+                                      # molly_remedio → elderly_screen abre
+                                      # a Molly). gerarAviso()/
+                                      # classificarResposta() são puras
+        molly_safety_service.dart    # MollySafetyService (sessão 25, TAREFA
+                                      # 22) — regras rígidas: nunca dose/
+                                      # indicação/diagnóstico/"você está
+                                      # seguro". Entrada (antes da IA, depois
+                                      # do offline) + filtro da fala da IA
+        molly_medication_service.dart # MollyMedicationService (sessão 25,
+                                      # TAREFA 21) — "já tomei meu remédio
+                                      # hoje?", resumo pelo que foi marcado
+        molly_family_intent.dart     # MollyFamilyIntent (sessão 25, TAREFA
+                                      # 20) — "avisa a Ana que…", "manda
+                                      # mensagem pro…", "quem acompanha meus
+                                      # lembretes?" — puro, chamado pelo
+                                      # OfflineIntentService
         molly_tool_registry.dart     # catálogo de ferramentas (TAREFA 3)
         molly_risk_policy.dart       # LOW roda direto; MEDIUM roda direto
                                       # exceto se ambíguo; CRITICAL sempre
@@ -658,6 +696,9 @@ lib/
                                       # suaves — palavra inteira (\p{L},
                                       # não \b — acentos), negação e
                                       # relato de passado
+                                      # Sessão 25: + contatoEmergencia ("quem
+                                      # é meu contato de emergência?" →
+                                      # ProfileTool.getEmergencyContacts)
         molly_voice_service.dart     # STT+TTS (TAREFA 5) — única classe
                                       # instanciável da MOLLY; estados
                                       # idle/listening/thinking/speaking/
@@ -674,8 +715,12 @@ lib/
         family_tool.dart             # getFamilyMembers/sendFamilyMessage/
                                       # callFamilyMember (chat, não disca — sem
                                       # telefone por familiar, ver análise)
+                                      # Sessão 25: getCaregivers +
+                                      # resolverFamiliar() ("minha filha" só
+                                      # resolve com 1 familiar; senão pede nome)
         location_tool.dart           # getCurrentLocation
-        profile_tool.dart            # getUserProfile
+        profile_tool.dart            # getUserProfile, getEmergencyContacts
+                                      # (sessão 25 — números SOS locais)
         molly_fala_utils.dart        # horaFalada() compartilhado
     family/
       family_screen.dart

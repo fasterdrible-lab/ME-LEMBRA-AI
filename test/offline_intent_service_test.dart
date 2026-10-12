@@ -115,6 +115,31 @@ void main() {
       );
     });
 
+    test('TAREFA 37: reconhece perguntas sobre o contato de emergencia', () {
+      const frases = [
+        'Quem é meu contato de emergência?',
+        'Molly, qual o número de emergência?',
+        'qual é o telefone do SOS',
+        'quem e meu contato de emergencia',
+      ];
+      for (final frase in frases) {
+        expect(OfflineIntentService.classificar(frase), OfflineIntent.contatoEmergencia, reason: frase);
+      }
+    });
+
+    test('TAREFA 37: pedido de ligacao ou emergencia real nao vira consulta de contato', () {
+      expect(
+        OfflineIntentService.classificar('liga para meu contato de emergência'),
+        isNot(OfflineIntent.contatoEmergencia),
+      );
+      // SOCORRO continua com prioridade máxima, mesmo junto da pergunta.
+      expect(
+        OfflineIntentService.classificar('socorro, chama meu contato de emergência'),
+        OfflineIntent.socorro,
+      );
+      expect(OfflineIntentService.classificar('isso é uma emergência'), OfflineIntent.nenhuma);
+    });
+
     test('TAREFA 19: a frase suave real continua reconhecida sem negacao/passado por perto', () {
       expect(
         OfflineIntentService.classificar('mãe, eu realmente preciso de ajuda agora'),
