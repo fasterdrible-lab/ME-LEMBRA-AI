@@ -789,6 +789,13 @@ docs/
   ARCHITECTURE.md                    # este arquivo
   CURRENT_STATE.md                   # estado atual e histórico
   TASKS.md                           # backlog de tarefas
+  MOLLY_ARCHITECTURE.md              # sessão 25 — como a Molly funciona
+  MOLLY_TOOLS.md                     # ferramentas, risco, como são alcançadas
+  MOLLY_MEMORY.md                    # memória curta/longa, consentimento
+  MOLLY_SAFETY.md                    # SOS, saúde, ações, privacidade
+  MOLLY_TESTING.md                   # como testar (app e backend)
+  MOLLY_ACCESSIBILITY_CHECKLIST.md   # checklist 60+ e roteiro com idosos
+  MOLLY_ARCHITECTURE_ANALYSIS.md     # auditoria original (sessão 23)
 ```
 
 ---

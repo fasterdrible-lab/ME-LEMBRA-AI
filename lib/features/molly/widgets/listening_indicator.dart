@@ -17,8 +17,11 @@ class ListeningIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final (String texto, Color cor) = switch (estado) {
       MollyVoiceState.listening => ('Estou ouvindo...', const Color(0xFF4A90D9)),
-      MollyVoiceState.thinking => ('Pensando...', const Color(0xFFFF8C00)),
-      MollyVoiceState.speaking => ('Falando...', const Color(0xFF50C878)),
+      // Laranja/verde escurecidos (sessão 25, checklist de acessibilidade):
+      // #FF8C00 e #50C878 davam 2,3:1 e 2,1:1 sobre branco — abaixo do
+      // mínimo de 3:1 para texto grande. Agora 4,7:1 e 5,1:1.
+      MollyVoiceState.thinking => ('Pensando...', const Color(0xFFB35C00)),
+      MollyVoiceState.speaking => ('Falando...', const Color(0xFF2E7D32)),
       MollyVoiceState.error => ('Não consegui ouvir', const Color(0xFFE53935)),
       MollyVoiceState.idle => ('Toque no microfone para falar', const Color(0xFF7B5EA7)),
     };
