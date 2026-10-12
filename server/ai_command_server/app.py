@@ -243,7 +243,10 @@ def verificar_token(auth_header: str | None) -> str | None:
 
 
 init_firebase()
-groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+# Sem novas tentativas automáticas: num limite por minuto (429) a Groq pede
+# 13-22 s de espera, mas o app desiste em 6 s — esperar só atrasaria a
+# mensagem de "dificuldade". Falhar rápido é melhor pra quem está ouvindo.
+groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0, timeout=5.5)
 
 app = Flask(__name__)
 limiter = Limiter(
@@ -330,9 +333,16 @@ def interpretar_comando():
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             response_format={"type": "json_object"},
-            max_tokens=400,
+            # gpt-oss "pensa" antes de responder e esse raciocínio conta no
+            # max_tokens. Com 400 e muitos lembretes no contexto, o limite
+            # estourava antes do JSON e a Groq devolvia 400
+            # json_validate_failed com resposta vazia (Molly: "estou com
+            # dificuldade"). Medido em 12/10/2026: "o que eu tenho hoje" com
+            # 15 lembretes gastou 381/400; com reasoning_effort low, 92.
+            max_tokens=1024,
             temperature=0.2,
             messages=_montar_mensagens(agora, lembretes, historico, texto, modo_companhia),
+            extra_body={"reasoning_effort": "low"},
         )
         raw = json.loads(completion.choices[0].message.content)
         acao = ComandoAction.from_raw(raw)

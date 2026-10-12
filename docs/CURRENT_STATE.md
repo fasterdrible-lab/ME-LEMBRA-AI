@@ -358,6 +358,14 @@ JSON. O SOS nunca passa por aqui — continua 100% local no app.
 > responde"** — modelo descontinuado (404) e chave inválida (401) — vale
 > checar os dois ao investigar no futuro.
 >
+> **Sessão 25 — terceiro motivo: resposta vazia por falta de tokens.**
+> `journalctl` com `400 json_validate_failed` e `failed_generation: ''`
+> = o raciocínio do `gpt-oss-20b` consumiu todo o `max_tokens` antes do
+> JSON. Corrigido com `max_tokens=1024` + `reasoning_effort: low` (TASK-37).
+> Checklist de "Molly não responde": 404 (modelo saiu do catálogo), 401
+> (chave), 400 json_validate_failed (tokens), 429 (limite de 8.000
+> tokens/min da chave — o prompt sozinho tem ~1.900).
+>
 > **Sessão 24 — `app.py` ganhou o campo opcional `memoria`** (gatilho de
 > memória de longo prazo, MOLLY-23 em `TASKS.md`) — implantado do mesmo
 > jeito (`scp` + `systemctl restart`), `healthz` OK.
