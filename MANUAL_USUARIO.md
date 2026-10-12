@@ -114,6 +114,9 @@ A **Molly** é a assistente por voz do Me Lembra Aí. Ela fala de forma simples,
 | *"Meus alertas"* | Conta sobre seus alertas SOS |
 | *"Que horas são?"* | Fala a hora |
 | *"Quem é meu contato de emergência?"* | Fala o número cadastrado para o SOS |
+| *"Vai chover hoje?"* / *"Como está o tempo em Campinas?"* | Fala a previsão do tempo. Usa sua localização (se você já permitiu) ou pergunta a cidade |
+| *"Quais as notícias de hoje?"* | Conta 2 ou 3 manchetes da Agência Brasil, de forma calma |
+| *"Me conta uma curiosidade sobre o mar"* / *"Quem descobriu o Brasil?"* | Responde perguntas de conhecimento geral, em poucas frases |
 | *"Já tomei meu remédio hoje?"* | Diz quais remédios de hoje já foram marcados como tomados e qual é o próximo |
 
 ### O que a Molly não faz
@@ -156,7 +159,7 @@ Para essas perguntas, ela orienta falar com o **médico, o farmacêutico ou a fa
 
 ### Sem internet
 
-Os comandos principais funcionam mesmo sem internet: socorro, lembretes de hoje, que horas são, confirmar remédio e ligar para um familiar.
+Os comandos principais funcionam mesmo sem internet: socorro, lembretes de hoje, que horas são, confirmar remédio e ligar para um familiar. Previsão do tempo, notícias e curiosidades precisam de internet.
 
 ### Molly em tela cheia
 

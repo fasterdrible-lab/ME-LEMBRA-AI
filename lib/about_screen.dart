@@ -111,6 +111,7 @@ class _AboutScreenState extends State<AboutScreen> {
               'Ouvir lembretes: "Quais são meus lembretes de hoje?". Ela resume em poucas frases.',
               'Lista de compras: "Adiciona leite na lista de compras".',
               'Outros pedidos: "Que horas são?", "Meus alertas", "Confirmar remédio", "Quem é meu contato de emergência?".',
+              'Com internet: "Vai chover hoje?", "Quais as notícias de hoje?" (Agência Brasil) e curiosidades, como "Quem descobriu o Brasil?".',
               '"Ligar para (nome)": a Molly pede confirmação e avisa o familiar pelo chat.',
               'Família: "Avisa a Ana que estou bem", "Manda mensagem pro Pedro" (ela pergunta o que dizer), "Quem está acompanhando meus lembretes?".',
               'Se você disser "minha filha" e tiver mais de um familiar vinculado, a Molly pede o nome.',

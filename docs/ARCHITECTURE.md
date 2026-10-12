@@ -757,6 +757,9 @@ server/
   sos-notifier.service               # unit systemd
   ai_command_server/                 # VPS: backend do comando de voz por IA
     app.py                           # Flask: POST /interpretar-comando (Groq)
+    internet.py                      # sessão 25: previsão (Open-Meteo) e
+                                      # manchetes (Agência Brasil, RSS) —
+                                      # só quando a frase pede, com cache
     requirements.txt                 # flask, gunicorn, groq, firebase-admin
     .env.example                     # modelo do .env (GROQ_API_KEY) — não commitado
     melembra-ai-backend.service      # unit systemd (gunicorn na porta 8091)

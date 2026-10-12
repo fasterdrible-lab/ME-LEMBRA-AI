@@ -27,6 +27,31 @@ class LocationService {
     );
   }
 
+  /// Posição aproximada para a previsão do tempo da Molly — NUNCA pede
+  /// permissão (só usa se já foi concedida), precisão baixa, última posição
+  /// conhecida primeiro e no máximo [limite] de espera. `null` em qualquer
+  /// problema: a Molly então pergunta a cidade.
+  static Future<Position?> posicaoAproximadaSemPedir({
+    Duration limite = const Duration(seconds: 2),
+  }) async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      final permissao = await Geolocator.checkPermission();
+      if (permissao != LocationPermission.always &&
+          permissao != LocationPermission.whileInUse) {
+        return null;
+      }
+      final ultima = await Geolocator.getLastKnownPosition();
+      if (ultima != null) return ultima;
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+        timeLimit: limite,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Stream contínuo de posições (útil para acompanhamento em tempo real).
   static Stream<Position> positionStream({
     int distanceFilter = 10,

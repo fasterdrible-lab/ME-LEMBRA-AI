@@ -41,6 +41,8 @@ from flask import Flask, jsonify, request
 from flask_limiter import Limiter
 from groq import Groq
 
+import internet  # tempo e notícias, só quando a frase pede
+
 load_dotenv()
 
 logging.basicConfig(
@@ -127,13 +129,15 @@ Regras:
 - "adicionar_item_lista": quando pede para adicionar item(ns) na lista de compras/mercado. Preencha "itens".
 - "consultar_alertas": quando pergunta sobre alertas de SOS enviados.
 - "perguntar": quando o pedido está ambíguo ou incompleto para ser executado com segurança (ex.: pediu para criar um lembrete mas não disse a hora, ou não ficou claro qual item da lista). Preencha "fala" com UMA pergunta curta e específica para esclarecer — nunca confirme uma ação nem invente o dado que falta.
-- "responder": para conversa livre, pergunta geral sobre os lembretes/dados fornecidos no contexto, ou qualquer coisa que não é uma ação do app. Preencha "fala" com uma resposta curta, gentil e direta, baseada SOMENTE no que está no contexto — nunca invente lembretes, horários, alertas ou dados que não foram te passados. Isso inclui conversa de "Modo Companhia": se o usuário disser que quer conversar, que está sozinho, pedir uma história curta ou algo bom pra ouvir, responda com calor humano (uma história curta e leve é permitida) — mas você não é terapeuta nem médica, nunca diga que resolveu a tristeza ou solidão do usuário; se ele parecer triste ou em sofrimento, sugira gentilmente falar com um familiar ou buscar ajuda de verdade. Se o usuário disser que quer falar com um familiar (ex.: "quero falar com minha filha"), nunca diga que vai ligar, mandar mensagem ou avisar alguém — isso não é uma ação que você executa; só converse e, se fizer sentido, sugira que o próprio usuário entre em contato.
+- "responder": para conversa livre, pergunta geral sobre os lembretes/dados fornecidos no contexto, ou qualquer coisa que não é uma ação do app. Preencha "fala" com uma resposta curta, gentil e direta. Sobre os dados do usuário (lembretes, horários, alertas, familiares) use SOMENTE o contexto — nunca invente. Perguntas de conhecimento geral e curiosidades (história, geografia, natureza, culinária, como algo funciona, significado de palavras, datas comemorativas) você PODE responder com o que sabe, em 1 a 3 frases; se não tiver certeza, diga que não tem certeza em vez de chutar. Sobre fatos do momento (tempo de hoje, notícias, resultados de jogos, preços, cotações) use SOMENTE o bloco "Informações da internet" do contexto; se ele não vier ou disser que não foi possível consultar, diga com gentileza que não conseguiu ver isso agora — nunca invente. Isso inclui conversa de "Modo Companhia": se o usuário disser que quer conversar, que está sozinho, pedir uma história curta ou algo bom pra ouvir, responda com calor humano (uma história curta e leve é permitida) — mas você não é terapeuta nem médica, nunca diga que resolveu a tristeza ou solidão do usuário; se ele parecer triste ou em sofrimento, sugira gentilmente falar com um familiar ou buscar ajuda de verdade. Se o usuário disser que quer falar com um familiar (ex.: "quero falar com minha filha"), nunca diga que vai ligar, mandar mensagem ou avisar alguém — isso não é uma ação que você executa; só converse e, se fizer sentido, sugira que o próprio usuário entre em contato.
 - "Modo Companhia" vem no contexto como ligado ou desligado. Se estiver DESLIGADO: nada de histórias nem conversa longa — responda com gentileza em uma frase só; se o usuário parecer triste ou sozinho, sugira com carinho falar com um familiar. Se estiver LIGADO: vale a conversa de companhia descrita na regra "responder" acima. As regras de segurança valem nos dois casos.
 - Você recebe em "Lembretes cadastrados" a lista real dos lembretes do usuário (título, tipo, data/hora). Use SOMENTE essa lista para responder perguntas sobre lembretes existentes (ex.: "o que eu tenho hoje?", "eu já tenho consulta marcada?"). Se a lista não trouxer o que foi perguntado, diga que não encontrou — não invente um item "para ser útil".
 - Você pode receber um histórico das últimas trocas da conversa. Use-o para entender continuidade, mas aplique as mesmas regras acima a cada novo comando — não repita uma ação já executada em um turno anterior.
 - Omita campos que não se aplicam à ação escolhida (não precisa incluir com valor vazio).
 - Nunca invente que disparou um SOS ou uma ligação de emergência — isso não é controlado por você.
-- Nunca invente lembretes, alertas, itens de lista ou qualquer outro dado que não esteja explicitamente no contexto fornecido ou na frase do usuário. Na dúvida, pergunte ou diga que não sabe — não adivinhe.
+- Nunca invente lembretes, alertas, itens de lista ou qualquer outro dado do usuário ou do momento (tempo, notícias) que não esteja explicitamente no contexto fornecido ou na frase do usuário. Na dúvida, pergunte ou diga que não sabe — não adivinhe.
+- Tempo: com o bloco de previsão, responda em 1 ou 2 frases o que foi perguntado (ex.: vai chover? leve guarda-chuva se a chance for alta; está frio? diga a temperatura). Se a pessoa perguntar do tempo e não vier previsão nem localização, use a ação "responder" (NUNCA "perguntar" — "perguntar" é só para completar lembrete) com a fala "De qual cidade você quer saber a previsão do tempo?".
+- Notícias: com o bloco de manchetes, comece com "Segundo a Agência Brasil," e conte 2 ou 3 de forma calma e neutra, uma frase curta cada, sem detalhes violentos ou assustadores. Prefira as leves (esporte, cultura, serviço, ciência, economia do dia a dia); evite crimes, tragédias e disputas políticas quando houver outras opções. Não opine sobre política. Se a pessoa parecer abalada com alguma notícia, acolha e sugira conversar com a família.
 - "memoria" (campo OPCIONAL, independente de "acao" — pode vir junto de qualquer ação): inclua SOMENTE quando o usuário compartilhar uma preferência pessoal durável, não algo pontual/de uma vez só. Bons exemplos: "pode me chamar de Seu Antônio" (nome_preferido), "eu sempre almoço ao meio-dia" (horario_rotina), "eu prefiro tomar remédio de manhã" (preferencia). NÃO inclua "memoria" para: comandos de ação (criar lembrete, ouvir lembretes, etc.), perguntas, comentários pontuais de um momento só, ou qualquer coisa da qual você não tenha certeza — nesse caso, omita o campo inteiro. Você nunca decide sozinha se isso é salvo: é só uma sugestão, o app sempre pergunta ao usuário antes de guardar qualquer coisa.
 """
 
@@ -244,8 +248,9 @@ def verificar_token(auth_header: str | None) -> str | None:
 
 init_firebase()
 # Sem novas tentativas automáticas: num limite por minuto (429) a Groq pede
-# 13-22 s de espera, mas o app desiste em 6 s — esperar só atrasaria a
-# mensagem de "dificuldade". Falhar rápido é melhor pra quem está ouvindo.
+# 13-22 s de espera, mas o app desiste em 8 s (internet até 2,5 s + Groq
+# até 5,5 s) — esperar só atrasaria a mensagem de "dificuldade". Falhar
+# rápido é melhor pra quem está ouvindo.
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0, timeout=5.5)
 
 app = Flask(__name__)
@@ -286,6 +291,7 @@ def _montar_mensagens(
     historico: list[Any],
     texto: str,
     modo_companhia: bool = True,
+    info_internet: str | None = None,
 ) -> list[dict]:
     mensagens = [{"role": "system", "content": SYSTEM_PROMPT}]
     trocas = historico[-MAX_HISTORICO_TROCAS:] if isinstance(historico, list) else []
@@ -302,10 +308,44 @@ def _montar_mensagens(
         f"Agora é: {agora}\n"
         f"Lembretes cadastrados:\n{_formatar_lembretes(lembretes)}\n"
         f"Modo Companhia: {'ligado' if modo_companhia else 'desligado'}\n"
-        f"Comando: {texto}"
+        + (f"Informações da internet (consultadas agora):\n{info_internet}\n" if info_internet else "")
+        + f"Comando: {texto}"
     )
     mensagens.append({"role": "user", "content": contexto_texto})
     return mensagens
+
+
+def _consultar_internet(texto: str, localizacao: Any, historico: Any = None) -> str | None:
+    partes = []
+    # Resposta curta a "De qual cidade você quer saber a previsão do
+    # tempo?" (ex.: só "Campinas"): a frase em si não fala de tempo, mas a
+    # última fala da Molly sim — trata como pedido de previsão dessa cidade.
+    if not internet.precisa_tempo(texto) and _molly_perguntou_cidade(historico):
+        texto = f"previsão do tempo em {texto.strip().rstrip('.!?')}"
+    if internet.precisa_tempo(texto):
+        lat = lon = None
+        if isinstance(localizacao, dict):
+            try:
+                lat, lon = float(localizacao["lat"]), float(localizacao["lon"])
+            except (KeyError, TypeError, ValueError):
+                lat = lon = None
+        partes.append(
+            internet.buscar_tempo(texto, lat, lon)
+            or "Previsão do tempo: não foi possível consultar agora (sem localização ou serviço fora do ar)."
+        )
+    if internet.precisa_noticias(texto):
+        partes.append(internet.buscar_noticias() or "Notícias: não foi possível consultar agora.")
+    return "\n".join(partes) if partes else None
+
+
+def _molly_perguntou_cidade(historico: Any) -> bool:
+    if not isinstance(historico, list) or not historico:
+        return False
+    ultima = historico[-1]
+    if not isinstance(ultima, dict):
+        return False
+    fala = str(ultima.get("assistente") or "").lower()
+    return "qual cidade" in fala and "tempo" in fala
 
 
 @app.route("/interpretar-comando", methods=["POST"])
@@ -329,6 +369,11 @@ def interpretar_comando():
     modo_companhia = contexto.get("modo_companhia")
     modo_companhia = True if modo_companhia is None else bool(modo_companhia)
 
+    # Tempo/notícias: só consulta a internet quando a frase pede (economiza
+    # tempo e o limite de tokens/min). Localização vem do app só nesses
+    # casos, arredondada (~1 km); cidade dita na frase tem prioridade.
+    info_internet = _consultar_internet(texto, contexto.get("localizacao"), historico)
+
     try:
         completion = groq_client.chat.completions.create(
             model=GROQ_MODEL,
@@ -341,7 +386,7 @@ def interpretar_comando():
             # 15 lembretes gastou 381/400; com reasoning_effort low, 92.
             max_tokens=1024,
             temperature=0.2,
-            messages=_montar_mensagens(agora, lembretes, historico, texto, modo_companhia),
+            messages=_montar_mensagens(agora, lembretes, historico, texto, modo_companhia, info_internet),
             extra_body={"reasoning_effort": "low"},
         )
         raw = json.loads(completion.choices[0].message.content)

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'location_service.dart';
 import 'settings_service.dart';
 
 /// Uma troca (usuário + assistente) já concluída na conversa atual.
@@ -84,6 +85,22 @@ class AiCommandService {
   // para o passo a passo de deploy (DNS, systemd, nginx, certbot).
   static const String _baseUrl = 'https://api.melbrai.com.br';
 
+  /// Mesmas palavras do backend (`internet.py`, `precisa_tempo`) — é só
+  /// nessas frases que a localização vai junto. Pura e testável.
+  static bool pareceTempo(String texto) {
+    const de = 'áàâãéêíóôõúç';
+    const para = 'aaaaeeiooouc';
+    final t = texto.toLowerCase().split('').map((c) {
+      final i = de.indexOf(c);
+      return i == -1 ? c : para[i];
+    }).join();
+    return RegExp(
+      r'\b(previsao|vai chover|chover|chuva|chovendo|temperatura|calor|frio|graus|'
+      r'como (esta|ta|vai estar|fica) o tempo|o tempo (hoje|amanha|la fora|agora)|tempo (hoje|amanha)|'
+      r'clima|guarda.?chuva|sol hoje|esquentar|esfriar)\b',
+    ).hasMatch(t);
+  }
+
   static Future<ComandoAction?> interpretar(
     String texto, {
     List<ConversaTurno> historico = const [],
@@ -102,6 +119,19 @@ class AiCommandService {
       // TAREFA 15/24: o backend só conversa no tom de "Modo Companhia"
       // (histórias, papo mais longo) quando o usuário ligou essa opção.
       final modoCompanhia = await SettingsService.getMollyModoCompanhia();
+      // Previsão do tempo: só nessas perguntas manda a localização, e
+      // arredondada (~1 km). Nunca pede permissão — sem ela, o backend
+      // pergunta a cidade.
+      Map<String, double>? localizacao;
+      if (pareceTempo(texto)) {
+        final pos = await LocationService.posicaoAproximadaSemPedir();
+        if (pos != null) {
+          localizacao = {
+            'lat': (pos.latitude * 100).round() / 100,
+            'lon': (pos.longitude * 100).round() / 100,
+          };
+        }
+      }
 
       final response = await http
           .post(
@@ -116,13 +146,16 @@ class AiCommandService {
                 'agora': DateTime.now().toIso8601String(),
                 'lembretes': lembretesContexto,
                 'modo_companhia': modoCompanhia,
+                if (localizacao != null) 'localizacao': localizacao,
               },
               'historico': historicoLimitado
                   .map((t) => {'usuario': t.usuario, 'assistente': t.assistente})
                   .toList(),
             }),
           )
-          .timeout(const Duration(seconds: 6));
+          // 8 s (antes 6): em perguntas de tempo/notícias o backend consulta
+          // a internet antes da IA (até ~2,5 s a mais no pior caso).
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode != 200) {
         debugPrint(

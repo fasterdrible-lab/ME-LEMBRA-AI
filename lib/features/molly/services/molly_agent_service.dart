@@ -118,7 +118,12 @@ class MollyAgentService {
       return MollyToolResult.semIA();
     }
 
-    final resultado = await _executar(acao, memoria: memoria);
+    // "perguntar" põe a conversa em coleta de dia/hora de LEMBRETE. Pergunta
+    // de tempo sem cidade ("de qual cidade?") não é isso — fala como resposta
+    // normal, senão a próxima fala viraria "Para qual dia?".
+    final resultado = (acao.acao == 'perguntar' && AiCommandService.pareceTempo(textoLimpo))
+        ? MollyToolResult.sucesso(MollySafetyService.filtrarFalaDaIA(acao.fala))
+        : await _executar(acao, memoria: memoria);
     memoria?.registrarTroca(textoLimpo, resultado.fala);
 
     // Proposta de memória de longo prazo (sessão 24): campo independente
