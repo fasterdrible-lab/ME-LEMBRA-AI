@@ -492,6 +492,17 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
 
     if (resultado.acao == 'coletar_mensagem') {
       await _coletarMensagem(resultado.dados?['nomeFamiliar'] as String?);
+      return;
+    }
+
+    // "Para qual dia?"/"Que horas?": ouve a resposta sozinha (voz, ou o
+    // campo se a pessoa está digitando) — achado em teste no aparelho
+    // (sessão 26): sem isso, a pessoa não sabia que tinha que tocar o
+    // microfone de novo. A resposta volta para _processarFala, que segue a
+    // coleta. No limite de turnos, não abre (a Molly vai se despedir).
+    if ((resultado.acao == 'coletar_dia' || resultado.acao == 'coletar_hora') &&
+        !_memoria.atingiuLimiteDeTurnos) {
+      await _esperarResposta(_processarFala);
     }
   }
 

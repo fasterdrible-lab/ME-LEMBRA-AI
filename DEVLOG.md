@@ -1271,6 +1271,31 @@ mesmo abre o microfone. Flag `_ouvirDepoisDeInterromper`: desligada por
 senão o toque abre a escuta em 0,4 s. Sem teste automatizado (o estado
 "falando" depende do TTS, sem mock). Precisa de teste no aparelho.
 
+### Parte 9 — Deploy na VPS (32 + 21)
+
+O classificador de permissões negou duas vezes (o primeiro comando
+juntava preparação local com `rm -rf`, escrita e testes na VPS); o
+usuário autorizou e o deploy foi em etapas pequenas. Antes de trocar o
+`app.py`: confirmado que o de produção era igual ao commitado, só com
+CRLF (deploys anteriores via scp do Windows) — desta vez tudo foi em LF,
+o que importa para a unit do systemd. Teste em `/tmp/mollytest` com os
+venvs reais, rodada real do aviso de remédio só depois de confirmar 0
+usuários com a opção. Backend e `remedio-notifier` no ar; `sos-notifier`
+intacto; pasta temporária (com cópia da chave) apagada.
+
+### Parte 10 — Teste no aparelho (2026-10-13)
+
+Release instalado por cima. Para conferir a telemetria sem esperar o
+painel (24 h), `setprop log.tag.FA VERBOSE` durante o teste e leitura do
+logcat: todos os eventos só com códigos (depois voltado a INFO — o
+`setprop` não aceita valor vazio). O log também mostrou o que o usuário
+não relatou: depois de "Que horas?" o painel foi fechado e reaberto. Causa:
+o painel da Molly nunca reabriu o microfone na coleta de dia/hora (desde a
+sessão 24; o "Falar Comando" antigo reabria). Corrigido em
+`_falarResultado`. O teste automático novo cobre só a coleta por texto —
+escrito primeiro como se provasse a correção; renomeado ao perceber que
+passaria sem ela.
+
 ---
 
 ## Regra de ouro para este projeto

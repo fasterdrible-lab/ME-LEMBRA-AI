@@ -88,6 +88,31 @@ void main() {
       expect(find.text('que horas são'), findsNothing);
     });
 
+    // Cobre a coleta por texto. Abrir o MICROFONE sozinho depois de "Que
+    // horas?" (correção da sessão 26) não dá pra testar aqui — sem mock de
+    // speech_to_text; conferido no aparelho.
+    testWidgets('lembrete sem hora: "Que horas?" e a resposta digitada termina a coleta', (tester) async {
+      Future<void> enviar(String texto) async {
+        await tester.enterText(find.byType(TextField), texto);
+        await tester.tap(find.bySemanticsLabel('Enviar para a Molly'));
+        for (var i = 0; i < 8; i++) {
+          await tester.pump(const Duration(seconds: 1));
+        }
+      }
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pump();
+
+      // Lembrete sem IA, sem hora: entra na coleta.
+      await enviar('me lembra da consulta amanhã');
+      expect(find.text('Que horas?'), findsOneWidget);
+
+      // A resposta digitada vai para a coleta (não vira um pedido novo) e
+      // chega à criação — sem login no teste, para em "conectado".
+      await enviar('oito e meia');
+      expect(find.textContaining('conectado'), findsOneWidget);
+    });
+
     testWidgets('enviar com o campo vazio nao faz nada', (tester) async {
       await tester.pumpWidget(buildSubject());
       await tester.pump();
