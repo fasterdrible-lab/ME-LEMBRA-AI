@@ -1,5 +1,5 @@
 # 📱 Me Lembra Aí — Manual do Usuário
-**Versão 1.5.2** · Última atualização: outubro de 2026
+**Versão 1.7.0** · Última atualização: outubro de 2026
 
 ---
 
@@ -101,12 +101,19 @@ A **Molly** é a assistente por voz do Me Lembra Aí. Ela fala de forma simples,
 1. Toque em **Assistente Molly**.
 2. A Molly abre por cima da tela e **já começa a ouvir**.
 3. Fale normalmente. Ela responde em voz alta.
+4. **A conversa continua**: depois de responder, ela volta a ouvir sozinha. Para encerrar, diga *"tchau"*, *"obrigado"* ou *"pode parar"*, ou simplesmente fique em silêncio.
+
+**Prefere escrever?** Use o campo **"Ou escreva aqui"**, embaixo do microfone, e toque no botão de enviar. Funciona igual à voz — bom para lugares barulhentos.
+
+**Para interromper a Molly** enquanto ela fala, toque no microfone: ela para na hora e começa a ouvir você.
 
 ### O que você pode pedir
 
 | Você diz | A Molly faz |
 |----------|-------------|
-| *"Me lembra do remédio às oito"* | Cria um lembrete |
+| *"Me lembra do remédio às oito"* | Cria um lembrete (sem dizer o dia, vale a próxima vez desse horário) |
+| *"Me lembra de ligar para a Ana às quatro"* | Cria o lembrete para as **4 da tarde** (de 1 a 5 horas, sem dizer "da manhã", ela entende como tarde) |
+| *"Me lembra de tirar o bolo daqui a 20 minutos"* | Cria um lembrete para daqui a pouco |
 | *"Consulta dia 15 às 14 horas"* | Cria um lembrete de consulta |
 | *"Ligar para a Maria todo dia às 10"* | Cria um lembrete que se repete |
 | *"Quais são meus lembretes de hoje?"* | Resume seus compromissos do dia |
@@ -115,9 +122,17 @@ A **Molly** é a assistente por voz do Me Lembra Aí. Ela fala de forma simples,
 | *"Que horas são?"* | Fala a hora |
 | *"Quem é meu contato de emergência?"* | Fala o número cadastrado para o SOS |
 | *"Vai chover hoje?"* / *"Como está o tempo em Campinas?"* | Fala a previsão do tempo. Usa sua localização (se você já permitiu) ou pergunta a cidade |
-| *"Quais as notícias de hoje?"* | Conta 2 ou 3 manchetes da Agência Brasil, de forma calma |
+| *"Quais as notícias de hoje?"* | Conta até 3 manchetes da Agência Brasil, de forma calma, dando preferência às notícias leves |
 | *"Me conta uma curiosidade sobre o mar"* / *"Quem descobriu o Brasil?"* | Responde perguntas de conhecimento geral, em poucas frases |
 | *"Já tomei meu remédio hoje?"* | Diz quais remédios de hoje já foram marcados como tomados e qual é o próximo |
+| *"Confirmar remédio"* | Marca o remédio de hoje como tomado |
+| *"Ligar para (nome)"* | Pede confirmação e avisa o familiar pelo chat |
+| *"Avisa a Ana que estou bem"* | Manda essa mensagem para a Ana no chat e repete o que mandou |
+| *"Manda mensagem pro Pedro"* | Pergunta o que você quer dizer e manda a resposta |
+| *"Quem está acompanhando meus lembretes?"* | Diz quais familiares acompanham você |
+| *"Quem é minha família?"* | Diz quem está vinculado à sua conta |
+| *"Estou me sentindo sozinha"* | Conversa com você com calma (veja "Conversar e desabafar") |
+| *"Tchau"* / *"Obrigado"* / *"Pode parar"* | Encerra a conversa |
 
 ### O que a Molly não faz
 
@@ -128,15 +143,8 @@ A Molly **não é médica**. Ela nunca:
 - diz que "não é nada" ou que você está seguro.
 
 Para essas perguntas, ela orienta falar com o **médico, o farmacêutico ou a família**. Se você disser que tomou remédio a mais, ela orienta ligar para o médico ou o **192** e lembra que dizer **"socorro"** aciona o SOS.
-| *"Confirmar remédio"* | Marca o remédio de hoje como tomado |
-| *"Ligar para (nome)"* | Pede confirmação e avisa o familiar pelo chat |
-| *"Avisa a Ana que estou bem"* | Manda essa mensagem para a Ana no chat e repete o que mandou |
-| *"Manda mensagem pro Pedro"* | Pergunta o que você quer dizer e manda a resposta |
-| *"Quem está acompanhando meus lembretes?"* | Diz quais familiares acompanham você |
-| *"Quem é minha família?"* | Diz quem está vinculado à sua conta |
-| *"Obrigado"* / *"Pode parar"* | Encerra a conversa |
 
-**Se faltar alguma informação**, a Molly pergunta. Por exemplo: você diz *"marca uma consulta"*, e ela pergunta *"Para qual dia?"* e depois *"Que horas?"*. É só responder.
+**Se faltar alguma informação**, a Molly pergunta. Por exemplo: você diz *"me lembra da consulta amanhã"*, e ela pergunta *"Que horas?"*. Ela já fica ouvindo — é só responder.
 
 **Familiares pelo nome.** O app guarda só o nome de cada familiar, não o parentesco. Se você disser *"minha filha"* e tiver só um familiar vinculado, a Molly entende. Se tiver mais de um, ela pede o nome. Também dá para dizer *"minha filha Ana"*.
 
@@ -151,6 +159,14 @@ Para essas perguntas, ela orienta falar com o **médico, o farmacêutico ou a fa
 - Se você confirmar o remédio antes, o aviso não chega.
 - Para desligar: **Configurações da Molly → Avisos da Molly**.
 
+### Conversar e desabafar
+
+A Molly também está aqui para **conversar**. Você pode falar de como está se sentindo, de saudade, de solidão ou de uma preocupação: ela escuta com calma, lembra do que você contou na conversa e faz perguntas para você continuar, se quiser.
+
+- Ela **não é psicóloga nem médica**. Quando o assunto pesa, ela pode sugerir, com carinho, conversar com alguém de confiança.
+- Se você disser algo como *"queria morrer"* ou *"não quero mais viver"*, ela acolhe, lembra que o **CVV atende no 188** (de graça, a qualquer hora) e que dizer **"socorro"** aciona o SOS. Depois pergunta: *"Quer que eu avise sua família?"*. **Ela só avisa se você disser sim** — e a mensagem para a família diz apenas que você está passando por um momento difícil, **nunca o que você contou**.
+- Para histórias, ligue o **Modo companhia** (veja abaixo). Conversar e desabafar funciona sempre.
+
 ### Emergência pela voz
 
 - Dizer **"SOCORRO"** aciona o SOS **na hora**, mesmo sem internet.
@@ -159,7 +175,7 @@ Para essas perguntas, ela orienta falar com o **médico, o farmacêutico ou a fa
 
 ### Sem internet
 
-Os comandos principais funcionam mesmo sem internet: socorro, lembretes de hoje, que horas são, confirmar remédio e ligar para um familiar. Previsão do tempo, notícias e curiosidades precisam de internet.
+Os comandos principais funcionam mesmo sem internet: socorro, lembretes de hoje, que horas são, **criar lembrete** (*"me lembra do remédio às oito"*), confirmar remédio e avisar um familiar. O que precisa enviar algo (confirmação para a família, mensagem no chat) fica guardado e sai sozinho quando a internet voltar — a Molly avisa. Previsão do tempo, notícias, curiosidades e conversas mais longas precisam de internet.
 
 ### Molly em tela cheia
 
@@ -176,8 +192,9 @@ Em **Configurações → Configurações da Molly**:
 | **Velocidade da voz** | **Lenta** ou **Normal**. Vale para todas as falas do app. Ao trocar, ela fala um exemplo |
 | **Memória** | Deixa a Molly lembrar suas preferências (ex.: como gosta de ser chamado). Ela **sempre pergunta antes** de guardar |
 | **Ver o que a Molly lembra** | Mostra tudo o que ela guardou. Dá para corrigir, apagar um item ou apagar tudo |
-| **Modo companhia** | Ligado, a Molly conversa com mais calma e pode contar histórias curtas. Desligado, responde curto |
+| **Modo companhia** | Ligado, a Molly pode contar histórias curtas e bater papo por diversão. Conversar sobre como você está funciona sempre, ligado ou desligado |
 | **Avisos da Molly** | Ligado, 15 minutos depois do horário do remédio ela pergunta se você tomou |
+| **Avisar minha família sobre o remédio** | Ligado, se um remédio ficar **1 hora** sem ser confirmado, quem acompanha seus lembretes recebe um aviso (no chat e como notificação). Vem desligado — só você decide |
 | **Bom dia às 8h** | Liga ou desliga o aviso diário de bom dia |
 
 > O SOS e a palavra **"socorro"** funcionam sempre, com qualquer uma dessas opções.
@@ -213,6 +230,7 @@ Em **Configurações → Configurações da Molly**:
 
 - **Alertas SOS** dos familiares, na hora em que acontecem, com a localização.
 - **Lembretes** do familiar: se ele confirmou ou não.
+- **Remédio não confirmado**: se o familiar ligou a opção *"Avisar minha família sobre o remédio"*, você recebe um aviso quando um remédio dele ficar 1 hora sem confirmação.
 - **Histórico de alertas**: ao abrir, o alerta fica marcado como "visualizado".
 - **Chat** com cada familiar (veja a seção 14).
 

@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — Me Lembra Aí
 
-> Última atualização: 2026-10-12 (sessão 26 — MOLLY-34: cache da Molly, TAREFA 26)
+> Última atualização: 2026-10-13 (sessão 26 — versão 1.7.0: Molly acolhedora, sem internet, texto, aviso à família, telemetria)
 
 ---
 
@@ -8,8 +8,8 @@
 
 | Item | Valor |
 |---|---|
-| Versão do app | `1.6.0+24` |
-| APK atual | `me-lembra-ai-v1.6.0.apk` — 65.7 MB, gerado em 12/10/2026 (sessão 25): Molly com segurança/medicamentos, família, configurações, aviso de remédio, internet (tempo/notícias/curiosidades) + Modo Proteção `health`. Assinado com a chave de debug desta máquina (mesma dos APKs anteriores — instala por cima sem perder dados). Testado no aparelho de referência: abre sem crash, Modo Proteção `types=0x100` |
+| Versão do app | `1.7.0+25` |
+| APK atual | `me-lembra-ai-v1.7.0.apk` — 65.9 MB, gerado em 13/10/2026 (sessão 26): Molly sem internet (cache, lembrete sem IA), conversa por texto, interromper por toque, conversa contínua e desabafo com protocolo de crise (CVV 188), confirmação de remédio por dia + aviso à família (opt-in), telemetria (Firebase Analytics, sem conteúdo nem ID de publicidade). Mesma chave de debug — instala por cima sem perder dados. Instalado no aparelho de referência: abre sem crash, Modo Proteção `types=0x100`. Anterior: `me-lembra-ai-v1.6.0.apk` (sessão 25) |
 | Distribuição | Side-load (não publicado na Play Store) |
 | Dispositivo de referência | Samsung Galaxy A07 — ID `R9QL200MJ0N` |
 | Build release | `C:\MeLembraAI` (fora do OneDrive — obrigatório) |
@@ -675,6 +675,7 @@ projeto ainda (gap já registrado na Tarefa 1).
 
 | Sessão | Data | Principais entregas |
 |---|---|---|
+| 26 (k) | 2026-10-13 | **Versão 1.7.0+25.** Manual atualizado nos dois lugares (`MANUAL_USUARIO.md` v1.7.0 e "Sobre o App"): conversa contínua, escrever, interromper, lembrete sem IA ("às quatro" = 16h, "daqui a 20 minutos"), desabafo e CVV 188, aviso à família sobre o remédio, o que funciona sem internet; corrigidas 7 linhas da tabela de comandos que estavam fora da tabela. APK `me-lembra-ai-v1.7.0.apk` na pasta VERSÕES e instalado no aparelho. 227/6. |
 | 26 (j) | 2026-10-13 | **MOLLY-42 — Molly acolhedora: conversa contínua, desabafo e protocolo de crise.** Crise detectada localmente (CVV 188, socorro; avisa a família só com um sim, mensagem fixa). Conversa continua sozinha após cada resposta; memória 8 trocas/20 turnos. Sim/não e despedida por palavra inteira (antes "não, pode deixar" virava sim). Notícias: no máx. 3 manchetes leves, escolhidas no servidor. Backend implantado; app instalado. 227/6. Detalhes em `docs/TASKS.md` (MOLLY-42) |
 | 26 (i) | 2026-10-13 | **Instalado e testado no aparelho (MOLLY-41).** Release por cima, sem erro novo; telemetria conferida no log sem conteúdo. Corrigido: depois de "Que horas?"/"Para qual dia?" o microfone não reabria (desde a sessão 24). 200/6. Reinstalado. |
 | 26 (h) | 2026-10-12 | **Deploy na VPS (MOLLY-35 + MOLLY-38), com autorização.** Testes em `/tmp/mollytest` com os venvs de produção (12/12, 15/15, rota real com a Groq, rodada real do aviso de remédio com 0 envios). Backend da IA com `providers.py` no ar (backup `app.py.bak-20261012d`, `healthz` OK). Novo serviço `remedio-notifier` `active`/`enabled`, separado do `sos-notifier` (continua `active`). Pasta temporária apagada. Arquivos agora vão com LF. |

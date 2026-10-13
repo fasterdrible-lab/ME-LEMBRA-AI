@@ -25,7 +25,7 @@ class _AboutScreenState extends State<AboutScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _versao = info.version);
     } catch (_) {
-      if (mounted) setState(() => _versao = '1.6.0');
+      if (mounted) setState(() => _versao = '1.7.0');
     }
   }
 
@@ -65,7 +65,7 @@ class _AboutScreenState extends State<AboutScreen> {
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
-                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.6.0',
+                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.7.0',
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
@@ -105,8 +105,12 @@ class _AboutScreenState extends State<AboutScreen> {
             titulo: 'Assistente Molly',
             itens: [
               'Toque em "Assistente Molly". Ela já começa a ouvir, sem precisar trocar de tela.',
+              'A conversa continua: depois de responder, ela volta a ouvir sozinha. Para encerrar, diga "tchau" ou fique em silêncio.',
+              'Prefere escrever? Use o campo "Ou escreva aqui", embaixo do microfone, e toque em enviar.',
+              'Para interromper a Molly enquanto ela fala, toque no microfone.',
               'Criar lembrete: "Me lembra do remédio às oito", "Consulta dia 15 às 14 horas", "Ligar para a Maria todo dia às 10".',
-              'Se faltar o dia ou a hora, a Molly pergunta: "Para qual dia?" ou "Que horas?". É só responder.',
+              'Se faltar o dia ou a hora, a Molly pergunta: "Para qual dia?" ou "Que horas?". Ela já fica ouvindo: é só responder.',
+              '"Às quatro", sem dizer "da manhã", vira 4 da tarde. "Daqui a 20 minutos" também funciona.',
               'Repetição: diga "todo dia" ou "toda segunda" para o lembrete se repetir.',
               'Ouvir lembretes: "Quais são meus lembretes de hoje?". Ela resume em poucas frases.',
               'Lista de compras: "Adiciona leite na lista de compras".',
@@ -118,10 +122,12 @@ class _AboutScreenState extends State<AboutScreen> {
               'Remédio atrasado: 15 minutos depois do horário, chega o aviso "Você conseguiu tomar seu remédio?". Toque nele e responda à Molly. Se disser "não", ela oferece lembrar de novo (no máximo 2 vezes por dia).',
               'Remédios: "Já tomei meu remédio hoje?" diz o que foi marcado como tomado e qual é o próximo.',
               'A Molly não é médica: nunca indica remédio ou dose nem diz que doença você tem. Para isso, fale com seu médico, o farmacêutico ou a família.',
-              'Para encerrar a conversa, diga "obrigado" ou "pode parar".',
+              'Conversar e desabafar: fale de como está se sentindo. A Molly escuta com calma e lembra do que você contou. Ela não é psicóloga nem médica.',
+              'Se você disser algo como "queria morrer", ela lembra que o CVV atende no 188 (de graça, a qualquer hora) e pergunta se pode avisar sua família. Só avisa com um "sim", e nunca conta o que você disse.',
+              'Para encerrar a conversa, diga "tchau", "obrigado" ou "pode parar".',
               'Dizer "SOCORRO" aciona o SOS na hora, mesmo sem internet.',
               'Frases como "me ajuda" ou "estou passando mal" mostram uma contagem com o botão Cancelar antes de acionar o SOS.',
-              'Os comandos principais (socorro, lembretes de hoje, que horas são) funcionam mesmo sem internet.',
+              'Os comandos principais (socorro, lembretes de hoje, que horas são, criar lembrete) funcionam mesmo sem internet.',
             ],
           ),
 
@@ -229,7 +235,8 @@ class _AboutScreenState extends State<AboutScreen> {
               'Número de emergência: configure até 3 contatos SOS.',
               'Modo Proteção: mantém o detector de queda funcionando com o app fechado (veja "Modo Proteção" acima).',
               'Abrir Molly: abre a Assistente Molly em tela cheia, com a lista de lembretes de hoje.',
-              'Configurações da Molly: liga ou desliga a Molly, a resposta por voz, a memória, o modo companhia, os avisos e o bom dia às 8h. Também escolhe a velocidade da voz (lenta ou normal).',
+              'Configurações da Molly: liga ou desliga a Molly, a resposta por voz, a memória, o modo companhia (histórias), os avisos e o bom dia às 8h. Também escolhe a velocidade da voz (lenta ou normal).',
+              'Avisar minha família sobre o remédio: se um remédio ficar 1 hora sem confirmação, quem acompanha seus lembretes recebe um aviso. Vem desligado.',
               'Notificações: liga ou desliga os alertas de lembretes.',
               'SOS por Teclas: pressione volume 5 vezes para disparar SOS com app aberto.',
               'Modo Escuro: alterna entre tema claro e escuro.',
