@@ -170,6 +170,16 @@ false, sem sinais de anúncio personalizado, permissões `AD_ID`/
 `ACCESS_ADSERVICES_*` removidas). O painel do Analytics mostra os dados
 com até 24 h de atraso e só agregados.
 
+## Conversa contínua (sessão 26)
+
+Resposta livre da IA volta com `acao: 'conversa'`; o painel volta a ouvir
+sozinho (`_acoesDeConversa`: conversa, crise, aviso de crise) — desabafo
+não termina a cada frase. Termina com despedida (`MollyRespostas.
+ehDespedida`: "tchau"/"pode parar" sempre; "obrigado"/"chega" só em frase
+curta), silêncio ou 20 turnos. Memória da conversa: 8 trocas (app e
+backend). Também volta a ouvir depois de "Que horas?"/"Para qual dia?".
+Crise: ver `MOLLY_SAFETY.md` §1b.
+
 ## Voz ou texto (Fase 1, sessão 26)
 
 `MollyAssistantPanel` aceita fala e texto digitado ("Ou escreva aqui"):

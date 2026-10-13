@@ -174,8 +174,27 @@ def buscar_tempo(texto: str, latitude: float | None, longitude: float | None) ->
 # ---------------------------------------------------------------- notícias
 
 
-def buscar_noticias(maximo: int = 6) -> str | None:
-    """Últimas manchetes da Agência Brasil (só os títulos), ou None."""
+# Sessão 26: o modelo ignorava "2 ou 3 manchetes, evite crimes e política"
+# e lia 6 em lista (mais de meio minuto falado). A escolha agora é feita
+# aqui: no máximo 3, deixando por último o que for crime/tragédia/disputa
+# política — só entra se não houver manchetes leves suficientes.
+_RE_NOTICIA_PESADA = re.compile(
+    r"\b(pres[oa]s?|prende|prendem|pris[aã]o|pol[ií]cia|crime|assassin\w*|homic[ií]dio|morte|morre\w*|mort[oa]s?|"
+    r"tiroteio|trag[eé]dia|acidente|golpe|fraude|investiga\w*|lula|bolsonaro|stf|tse|stj|campanha|elei[cç]\w*|"
+    r"candidat\w*|partido|deputad\w*|senador\w*|ministr\w*|congresso|c[aâ]mara|pf|ministério público)\b",
+    re.IGNORECASE,
+)
+
+
+def escolher_manchetes(titulos: list[str], quantidade: int = 3) -> list[str]:
+    """Até [quantidade] manchetes, leves primeiro, mantendo a ordem do feed."""
+    leves = [t for t in titulos if not _RE_NOTICIA_PESADA.search(t)]
+    pesadas = [t for t in titulos if _RE_NOTICIA_PESADA.search(t)]
+    return (leves + pesadas)[:quantidade]
+
+
+def buscar_noticias(maximo: int = 15) -> str | None:
+    """Até 3 manchetes da Agência Brasil (só os títulos), leves primeiro, ou None."""
     agora = time.time()
     if "noticias" in _cache and agora - _cache["noticias"][0] < CACHE_NOTICIAS_S:
         return _cache["noticias"][1]  # type: ignore[return-value]
@@ -187,7 +206,7 @@ def buscar_noticias(maximo: int = 6) -> str | None:
             (item.findtext("title") or "").strip()
             for item in raiz.iter("item")
         ]
-        titulos = [t for t in titulos if t][:maximo]
+        titulos = escolher_manchetes([t for t in titulos if t][:maximo])
     except Exception as exc:  # noqa: BLE001
         log.warning("internet: falha ao ler notícias: %s", exc)
         return None

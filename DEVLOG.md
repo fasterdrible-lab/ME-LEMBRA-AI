@@ -1296,6 +1296,17 @@ sessão 24; o "Falar Comando" antigo reabria). Corrigido em
 escrito primeiro como se provasse a correção; renomeado ao perceber que
 passaria sem ela.
 
+### Parte 11 — Molly acolhedora (MOLLY-42)
+
+O usuário quer que a pessoa possa "abrir o coração". Não existia
+protocolo de crise — prioridade máxima, feito local (como o SOCORRO), com
+consentimento para avisar a família. Ao reler a confirmação, o achado mais
+grave da parte: `_ehAfirmativo` por `contains` lia "não, pode deixar" como
+SIM — valia para toda confirmação CRITICAL. Trocado por `MollyRespostas`
+(palavra inteira, "não" vence). Notícias: o teste com a Groq real mostrou
+6 manchetes numeradas com política apesar do prompt — escolha movida para
+o servidor. "Ela não responde" (notícias) não reproduzido.
+
 ---
 
 ## Regra de ouro para este projeto

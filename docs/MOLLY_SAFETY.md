@@ -23,6 +23,35 @@ garantia de segurança depende de a IA obedecer ao prompt.
   passado ("ontem eu precisei de ajuda").
 - SOCORRO tem prioridade sobre tudo: "avisa a Ana que socorro" é SOS.
 
+## 1b. Crise e desabafo (sessão 26)
+
+A Molly acolhe desabafos (solidão, luto, preocupações) **sempre**, com ou
+sem Modo Companhia — regra "CONVERSA E DESABAFO" do `SYSTEM_PROMPT`:
+acolher e nomear o sentimento, uma pergunta gentil, lembrar o que foi dito,
+não minimizar nem dar sermão; ela não é psicóloga — sugere pessoa de
+confiança ou profissional sem insistir a cada fala.
+
+**Crise** (falar em morrer, tirar a própria vida, não querer mais viver):
+- Detecção **local** (`MollySafetyService` → `MollySafetyIntent.crise`),
+  antes de qualquer outra regra de segurança e nunca pela IA. Passado
+  também conta ("ontem pensei em me matar"); "não quero morrer", "morrer
+  de rir" e "esse calor vai me matar" não.
+- Resposta fixa (`falaCrise`): acolhe, "eu estou aqui com você", **CVV
+  188** (gratuito, 24 h), "socorro" se houver perigo agora.
+- Com familiar vinculado: "Quer que eu avise sua família?" — **só avisa
+  com um sim** (escolha do usuário). A mensagem à família é fixa ("está
+  passando por um momento difícil… se puder, ligue agora") e **nunca
+  repete o desabafo**. "Não" também acolhe e a conversa continua.
+- O prompt do backend repete a regra (terceira camada).
+- Sim/não por palavra inteira (`MollyRespostas`): "não, pode deixar" é
+  não — antes era lido como sim.
+- Telemetria: só `molly_safety_block` com `tipo=crise`, nunca o texto.
+
+Saída da IA: "você vai ficar bem"/"está segura" continuam proibidos, mas a
+troca agora é acolhedora ("Eu estou aqui com você. Se não estiver se
+sentindo bem, diga socorro ou ligue 192.") em vez de mandar procurar o
+médico no meio de um desabafo.
+
 ## 2. Saúde e remédios (TAREFAs 21 e 22)
 
 A Molly **nunca**: diagnostica, indica remédio, dose ou quantidade, manda
@@ -84,11 +113,12 @@ Níveis de risco e quando confirmam: ver MOLLY_TOOLS.md.
 
 ## 5. Notícias
 
-Fonte única e pública (Agência Brasil). Regras de tom no prompt: começar
-com "Segundo a Agência Brasil,", 2–3 manchetes calmas, preferir as leves,
-evitar crimes/tragédias/disputa política quando houver outras, sem
-opinião, acolher se a pessoa parecer abalada. Limite conhecido: quando as
-manchetes do dia são quase todas políticas, alguma aparece.
+Fonte única e pública (Agência Brasil). Sessão 26: a escolha saiu do
+prompt (o modelo lia 6 manchetes em lista, com política e polícia) para o
+servidor — `internet.escolher_manchetes`: no máximo 3, leves primeiro;
+crime, tragédia e disputa política só entram se faltar manchete leve. O
+prompt pede começar com "Segundo a Agência Brasil," e contar em frase
+corrida, sem numerar, sem opinião. Testes: `test_internet.py`.
 
 ## 6. Privacidade
 

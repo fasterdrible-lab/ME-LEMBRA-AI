@@ -1,5 +1,10 @@
 /// O que [MollySafetyService.classificar] reconheceu numa fala do usuário.
 enum MollySafetyIntent {
+  /// Fala em morrer, tirar a própria vida ou não querer mais viver (sessão
+  /// 26). Resposta fixa e local — CVV 188, 192, "socorro" — e a oferta de
+  /// avisar a família, só com um "sim". Nunca depende da IA.
+  crise,
+
   /// Pede indicação/dose/troca de remédio ou um diagnóstico — a MOLLY
   /// nunca responde isso (TAREFAs 21/22 do prompt mestre).
   conselhoMedico,
@@ -44,9 +49,17 @@ class MollySafetyService {
   static const String falaSaidaBloqueada =
       'Isso eu não sei responder com segurança. O melhor é falar com o seu médico ou com sua família.';
 
+  /// Acolhe primeiro, sem sermão; CVV antes de tudo (gratuito, 24 h).
+  static const String falaCrise =
+      'Sinto muito que você esteja passando por isso. Eu estou aqui com você. '
+      'O CVV atende no 188, de graça e a qualquer hora, e conversar com eles ajuda. '
+      'Se estiver em perigo agora, diga socorro.';
+
   static MollySafetyIntent classificar(String texto) {
     final t = _normalizar(texto);
     if (t.isEmpty) return MollySafetyIntent.nenhuma;
+    // Primeiro: crise vale mais que qualquer outra regra desta classe.
+    if (_crise.any((r) => r.hasMatch(t))) return MollySafetyIntent.crise;
     if (_pareceExcessoDeRemedio(t)) return MollySafetyIntent.possivelExcessoDeRemedio;
     if (_pedeConselhoMedico(t)) return MollySafetyIntent.conselhoMedico;
     return MollySafetyIntent.nenhuma;
@@ -55,6 +68,8 @@ class MollySafetyService {
   /// Fala fixa para [intent], ou `null` se não for um caso de segurança.
   static String? respostaSegura(MollySafetyIntent intent) {
     switch (intent) {
+      case MollySafetyIntent.crise:
+        return falaCrise;
       case MollySafetyIntent.conselhoMedico:
         return falaConselhoMedico;
       case MollySafetyIntent.possivelExcessoDeRemedio:
@@ -69,6 +84,7 @@ class MollySafetyService {
   static String filtrarFalaDaIA(String fala) {
     final t = _normalizar(fala);
     if (_saidaProibida.any((r) => r.hasMatch(t))) return falaSaidaBloqueada;
+    if (_tranquilizacao.any((r) => r.hasMatch(t))) return falaTranquilizacaoBloqueada;
     // TAREFA 29: a fala livre da IA nunca executa nada — se ela "conta" que
     // excluiu/ligou/mandou/acionou algo, é invenção. (As ferramentas de
     // verdade, ex. "Mandei para Ana", não passam por este filtro.)
@@ -124,16 +140,45 @@ class MollySafetyService {
       r'\b(posso|devo)\b.*\b(trocar|aumentar|diminuir|dobrar|misturar|tomar outro|tomar outra)\b.*\b' + _remedio);
 
   /// O que uma resposta livre da IA nunca pode conter.
-  static final List<RegExp> _saidaProibida = [
+  /// Tranquilizar ("você vai ficar bem", "está segura"): também proibido,
+  /// mas a troca é acolhedora — no meio de um desabafo, mandar "falar com o
+  /// médico" soaria frio (sessão 26).
+  static final List<RegExp> _tranquilizacao = [
     RegExp(r'\bvoce (esta|ta) (segur[oa]|fora de perigo)\b'),
     RegExp(r'\bvoce vai ficar bem\b'),
     RegExp(r'\bfora de perigo\b'),
+  ];
+
+  static const String falaTranquilizacaoBloqueada =
+      'Eu estou aqui com você. Se não estiver se sentindo bem, diga socorro ou ligue 192.';
+
+  static final List<RegExp> _saidaProibida = [
     RegExp(r'\bnao (e|eh) (nada )?grave\b'),
     RegExp(r'\bnao precisa (ir ao |ir no |procurar (o |um )?|de |chamar (o |um )?)?medico\b'),
     RegExp(r'\b(emergencia|problema) (ja )?(foi |esta )?resolvid[oa]\b'),
     RegExp(r'\b(aumente|diminua|dobre|pare de tomar|deixe de tomar|tome mais|tome menos)\b'),
     RegExp(r'\bpode (tomar mais|aumentar|diminuir|dobrar|parar de tomar)\b'),
     RegExp(r'\bvoce (tem|esta com|deve estar com) (uma |um )?(gripe|infeccao|virose|dengue|covid|pneumonia|anemia|diabetes)\b'),
+  ];
+
+  /// Crise (sessão 26). Texto já sem acento. De propósito NÃO ignora
+  /// relato de passado ("ontem pensei em me matar" também merece cuidado),
+  /// ao contrário da emergência suave. Fora: "não quero morrer", "quero
+  /// morrer de rir", "esse calor vai me matar".
+  static final List<RegExp> _crise = [
+    RegExp(r'(?<!nao )\b(quero|queria|quer|vontade de|pensando em|penso em|pensei em|prefiro|preferia|melhor eu|seria melhor) morrer\b'
+        r'(?! de (rir|vergonha|saudade|fome|calor|frio|sono|tedio|medo))'),
+    RegExp(r'(?<!\b(vai|vao|isso|ele|ela|voce|voces|eles|elas) )\bme matar\b(?! de )'),
+    RegExp(r'\b(tirar|acabar com) (a )?minha (propria )?vida\b'),
+    RegExp(r'\bdar (um )?fim (n?a|em) minha vida\b'),
+    RegExp(r'\bnao (quero|aguento|consigo) mais viver\b'),
+    RegExp(r'\b(cansad[oa]|cansei) de viver\b'),
+    RegExp(r'\bnao vale (mais )?a pena viver\b'),
+    RegExp(r'\ba vida nao (tem|faz) mais sentido\b'),
+    RegExp(r'\bnao tenho (mais )?(motivo|razao) (pra|para) viver\b'),
+    RegExp(r'\bninguem (vai )?sentir(ia)? (a )?minha falta\b'),
+    RegExp(r'\b(todo mundo|todos|minha familia) (ficaria|seria|estaria) melhor sem mim\b'),
+    RegExp(r'\b(queria|quero) (estar|ta) mort[oa]\b'),
   ];
 
   static bool _pareceExcessoDeRemedio(String t) => _excesso.any((r) => r.hasMatch(t));

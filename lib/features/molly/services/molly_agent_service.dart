@@ -96,6 +96,15 @@ class MollyAgentService {
     // Depois do offline de propósito: SOCORRO e as frases suaves de
     // emergência continuam com prioridade sobre isto.
     final seguranca = MollySafetyService.classificar(textoLimpo);
+    // Sessão 26 — crise (falar em morrer, não querer mais viver): resposta
+    // fixa e local, nunca da IA; a conversa continua depois (o painel volta
+    // a ouvir). A frase fica no histórico pra IA seguir com cuidado.
+    if (seguranca == MollySafetyIntent.crise) {
+      MollyTelemetria.registrar(MollyEvento.safetyBlock, {'tipo': seguranca.name});
+      final r = await _acolherCrise();
+      memoria?.registrarTroca(textoLimpo, r.fala);
+      return r;
+    }
     final falaSegura = MollySafetyService.respostaSegura(seguranca);
     if (falaSegura != null) {
       MollyTelemetria.registrar(MollyEvento.safetyBlock, {'tipo': seguranca.name});
@@ -159,6 +168,18 @@ class MollyAgentService {
       );
     }
     return resultado;
+  }
+
+  /// CVV/192/socorro sempre; com familiar vinculado, pergunta se pode avisar
+  /// (escolha do usuário: só com um "sim" — `avisarFamiliaCrise`, CRITICAL).
+  static Future<MollyToolResult> _acolherCrise() async {
+    final membros = await MollyCache.familiares();
+    if (membros.isEmpty) return MollyToolResult.sucesso(MollySafetyService.falaCrise, acao: 'crise');
+    return MollyToolResult.confirmar(
+      '${MollySafetyService.falaCrise} Quer que eu avise sua família?',
+      acao: 'avisarFamiliaCrise',
+      parametrosPendentes: const {},
+    );
   }
 
   /// Pedido reconhecido por [MollyReminderParser.interpretarPedido]: com
@@ -232,8 +253,11 @@ class MollyAgentService {
       default:
         // TAREFA 22, camada de saída: texto livre da IA passa pelo filtro
         // de segurança antes de ser falado.
+        // acao 'conversa' (sessão 26): o painel volta a ouvir sozinho —
+        // conversa e desabafo não terminam a cada frase.
         return MollyToolResult.sucesso(
           acao.fala.isNotEmpty ? MollySafetyService.filtrarFalaDaIA(acao.fala) : 'Não entendi. Pode repetir?',
+          acao: 'conversa',
         );
     }
   }

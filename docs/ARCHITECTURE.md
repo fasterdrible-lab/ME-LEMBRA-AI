@@ -679,6 +679,8 @@ lib/
                                       # Firestore no aparelho; escrita que
                                       # não trava sem internet (fica
                                       # pendente e sobe quando voltar)
+        molly_respostas.dart         # MollyRespostas (sessão 26) — sim/não
+                                      # e despedida por palavra inteira
         molly_telemetria.dart        # MollyTelemetria (sessão 26, TAREFA
                                       # 27) — Firebase Analytics, eventos
                                       # sem conteúdo (lista fechada de
@@ -795,6 +797,7 @@ server/
                                       # Groq (modelos em ordem) e DeepSeek
                                       # de reserva paga, se houver chave
     test_providers.py                # 12 testes, sem rede (unittest)
+    test_internet.py                 # sessão 26: escolha de manchetes (3)
     internet.py                      # sessão 25: previsão (Open-Meteo) e
                                       # manchetes (Agência Brasil, RSS) —
                                       # só quando a frase pede, com cache

@@ -105,6 +105,50 @@ class FamilyTool {
     }
   }
 
+  /// Crise (sessão 26): avisa a família que a pessoa está passando por um
+  /// momento difícil — SÓ depois de ela dizer "sim" a "Quer que eu avise
+  /// sua família?" (CRITICAL: sempre confirma). Nunca repete o que ela
+  /// disse: a mensagem é fixa, o desabafo continua privado.
+  static final MollyToolDefinition avisarFamiliaCrise = MollyToolDefinition(
+    nome: 'avisarFamiliaCrise',
+    descricao: 'Avisa os familiares que a pessoa está passando por um momento difícil (só com o sim dela).',
+    risco: MollyRiskLevel.critical,
+    parametros: const [],
+    executar: (_) async {
+      final membros = await MollyCache.familiares();
+      if (membros.isEmpty) {
+        return MollyToolResult.sucesso(
+          'Você ainda não tem familiar vinculado no aplicativo. Ligue para alguém de confiança, ou para o CVV no 188.',
+          acao: 'avisarFamiliaCrise',
+        );
+      }
+      // Quem acompanha (cuidador) primeiro; se não houver, todos os vinculados.
+      final cuidadores = membros.where((m) => m.papel == 'cuidador').toList();
+      final destino = cuidadores.isNotEmpty ? cuidadores : membros;
+      final meuNome = await MollyCache.nome() ?? 'Seu familiar';
+      var enviouTodos = true;
+      for (final m in destino) {
+        try {
+          final enviado = await MollyCache.escrever(() => ChatService.send(
+                m.uid,
+                'Aviso da Molly: $meuNome está passando por um momento difícil e pediu que eu avisasse a família. '
+                'Se puder, ligue agora.',
+              ));
+          if (!enviado) enviouTodos = false;
+        } catch (_) {
+          enviouTodos = false;
+        }
+      }
+      final quem = juntarNomes(destino.map((m) => m.nome).toList());
+      return MollyToolResult.sucesso(
+        enviouTodos
+            ? 'Avisei $quem. Enquanto isso, eu continuo aqui com você.'
+            : 'Estou sem internet agora; aviso $quem assim que ela voltar. Se puder, ligue para alguém, ou para o CVV no 188.',
+        acao: 'avisarFamiliaCrise',
+      );
+    },
+  );
+
   /// "Quem está acompanhando meus lembretes?" (TAREFA 20) — os familiares
   /// com papel `cuidador` no vínculo (quem usou o código de convite).
   static final MollyToolDefinition getCaregivers = MollyToolDefinition(

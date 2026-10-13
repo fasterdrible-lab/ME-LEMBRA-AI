@@ -31,12 +31,14 @@ import '../models/molly_message.dart';
 ///    guardamos o resultado).
 class ShortTermMemory {
   /// Quantas trocas (usuário+assistente) manter no histórico mandado à
-  /// IA. Mesmo valor de `elderly_screen.dart` (`_maxHistoricoTrocas`).
-  static const int maxTrocas = 3;
+  /// IA. Sessão 26: 3 → 8 — numa conversa ou desabafo a Molly precisa
+  /// lembrar do que a pessoa contou (o backend corta no mesmo número,
+  /// `MAX_HISTORICO_TROCAS` em app.py).
+  static const int maxTrocas = 8;
 
-  /// Quantos turnos a conversa pode ter antes de encerrar sozinha. Mesmo
-  /// valor de `elderly_screen.dart` (`_maxTurnosConversa`).
-  static const int maxTurnos = 6;
+  /// Quantos turnos a conversa pode ter antes de encerrar sozinha. Sessão
+  /// 26: 6 → 20 — a conversa agora continua sozinha depois de cada resposta.
+  static const int maxTurnos = 20;
 
   final List<MollyMessage> _historico = [];
   int _turnos = 0;

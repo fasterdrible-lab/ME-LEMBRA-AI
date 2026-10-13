@@ -15,6 +15,7 @@ import '../services/molly_family_intent.dart';
 import '../services/offline_intent_service.dart';
 import '../services/molly_proactive_service.dart';
 import '../services/molly_reminder_parser.dart';
+import '../services/molly_respostas.dart';
 import '../services/molly_risk_policy.dart';
 import '../services/molly_telemetria.dart';
 import '../services/molly_voice_service.dart';
@@ -370,8 +371,9 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     // SOCORRO, nunca passa pela IA. Ported de elderly_screen.dart — não
     // conta como turno (a checagem acontece antes de avancarTurno()).
     if (_ehFraseDeEncerramento(limpo)) {
-      if (mounted) setState(() => _mensagem = 'Até logo!');
-      await _voz.falar('Até logo!');
+      const despedida = 'Até logo! Quando quiser conversar, é só me chamar.';
+      if (mounted) setState(() => _mensagem = despedida);
+      await _voz.falar(despedida);
       _memoria.encerrar();
       return;
     }
@@ -414,7 +416,7 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     }
 
     if (_memoria.atingiuLimiteDeTurnos) {
-      const aviso = 'Vamos continuar depois. Toque no microfone de novo quando quiser.';
+      const aviso = 'Gostei muito da nossa conversa. Quando quiser continuar, é só tocar no microfone.';
       if (mounted) setState(() => _mensagem = aviso);
       await _voz.falar(aviso);
       _memoria.encerrar();
@@ -503,8 +505,18 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     if ((resultado.acao == 'coletar_dia' || resultado.acao == 'coletar_hora') &&
         !_memoria.atingiuLimiteDeTurnos) {
       await _esperarResposta(_processarFala);
+      return;
+    }
+
+    // Conversa e desabafo (sessão 26): depois de uma resposta livre da IA,
+    // ou do acolhimento numa crise, volta a ouvir — a pessoa continua
+    // falando sem tocar em nada. Termina com despedida, silêncio ou limite.
+    if (_acoesDeConversa.contains(resultado.acao) && !_memoria.atingiuLimiteDeTurnos) {
+      await _esperarResposta(_processarFala);
     }
   }
+
+  static const _acoesDeConversa = {'conversa', 'crise', 'avisarFamiliaCrise', 'crise_sem_aviso'};
 
   /// TAREFA 20: "manda mensagem pro meu filho" sem dizer o quê — a pergunta
   /// já foi falada; ouve a próxima fala e manda ela como mensagem. SOCORRO
@@ -682,6 +694,12 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
             (pendente.dados?['parametrosPendentes'] as Map<String, dynamic>?) ?? const {};
         final resultadoFinal = await MollyRiskPolicy.confirmarEExecutar(pendente.acao, parametros);
         await _falarResultado(resultadoFinal);
+      } else if (pendente.acao == 'avisarFamiliaCrise') {
+        // Crise: "não" não encerra — acolhe e continua ouvindo.
+        await _falarResultado(MollyToolResult.sucesso(
+          'Tudo bem, não vou avisar ninguém. Eu continuo aqui. Quer me contar o que está acontecendo?',
+          acao: 'crise_sem_aviso',
+        ));
       } else {
         const cancelado = 'Tudo bem, não fiz nada.';
         if (mounted) setState(() => _mensagem = cancelado);
@@ -690,24 +708,10 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     });
   }
 
-  bool _ehAfirmativo(String texto) {
-    final t = texto.toLowerCase();
-    const palavras = ['sim', 'pode', 'isso mesmo', 'confirmo', 'confirmar', 'claro', 'é isso', 'e isso'];
-    return palavras.any((p) => t.contains(p));
-  }
-
-  /// Detecta frases de encerramento da conversa ("obrigado", "pode parar",
-  /// "só isso", "tchau"...) — mesma lista de `elderly_screen.dart`,
-  /// checagem local instantânea, nunca passa pela IA.
-  bool _ehFraseDeEncerramento(String texto) {
-    final t = texto.toLowerCase();
-    const frases = [
-      'obrigado', 'obrigada', 'pode parar', 'só isso', 'so isso',
-      'é só', 'e so', 'tchau', 'até mais', 'ate mais',
-      'chega', 'terminei', 'pode encerrar', 'finalizar',
-    ];
-    return frases.any((f) => t.contains(f));
-  }
+  // Sessão 26: por palavra inteira (antes "assim" era sim, "não, pode
+  // deixar" era sim, e "minha filha chega amanhã" encerrava a conversa).
+  bool _ehAfirmativo(String texto) => MollyRespostas.ehAfirmativo(texto);
+  bool _ehFraseDeEncerramento(String texto) => MollyRespostas.ehDespedida(texto);
 
   Future<void> _acionarSOSManual() async {
     final disparado = await SosService.trigger(motivo: 'manual');

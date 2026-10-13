@@ -139,19 +139,23 @@ void main() {
   });
 
   group('MollySafetyService.filtrarFalaDaIA — camada de saida', () {
-    test('bloqueia tranquilizar, dispensar medico, mudar dose e diagnosticar', () {
+    test('bloqueia dispensar medico, mudar dose e diagnosticar', () {
       const falas = [
-        'Fique tranquilo, você está seguro.',
         'Não é nada grave.',
         'Você não precisa ir ao médico.',
         'A emergência já foi resolvida.',
         'Pode aumentar a dose hoje.',
         'Tome mais um comprimido.',
         'Você está com uma virose.',
-        'Você vai ficar bem.',
       ];
       for (final f in falas) {
         expect(MollySafetyService.filtrarFalaDaIA(f), MollySafetyService.falaSaidaBloqueada, reason: f);
+      }
+    });
+
+    test('tranquilizar também é bloqueado, mas com troca acolhedora (sessão 26 — desabafo)', () {
+      for (final f in ['Fique tranquilo, você está seguro.', 'Você vai ficar bem.']) {
+        expect(MollySafetyService.filtrarFalaDaIA(f), MollySafetyService.falaTranquilizacaoBloqueada, reason: f);
       }
     });
 
