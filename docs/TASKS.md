@@ -92,6 +92,17 @@
 
 ## Pendentes
 
+### MOLLY-43 — Interromper a Molly pela voz (TAREFA 33, experimental)
+**Prioridade:** Média  
+**Branch:** `feature/molly-interromper-voz` (não mexe no `main`)  
+**Arquivos:** `lib/features/molly/screens/molly_eco_teste_screen.dart`, rota `/molly-eco-teste` em `lib/main.dart`  
+**Descrição:** medir no Galaxy A07 se o cancelamento de eco do Android tira a voz da própria Molly do microfone; só então implementar a detecção de voz durante a fala.  
+**Aceite:** números das 5 fases registrados em `docs/MOLLY_VOZ_LEVANTAMENTO.md` §5 e decisão: seguir (implementar) ou parar (o toque continua sendo a forma de interromper).  
+**Estado (sessão 26, 13/10/2026):** tela de medição pronta e APK de teste instalado no aparelho; **medição não feita** — depende de o usuário estar com o celular (silêncio nas fases 1–3, falar nas 4–5). Depois, reinstalar o release 1.7.0.
+
+### Retorno dos testes do usuário na 1.7.0
+**Estado (13/10/2026):** o usuário testou no aparelho mas não relatou o resultado. Sem confirmação: desabafo/conversa contínua, notícias (3 manchetes), fluxo de crise (CVV 188 e "não, pode deixar"), microfone abrindo sozinho depois de "Que horas?", campo de texto e tocar para interromper. O log do servidor mostrou 5 chamadas em sequência (padrão de conversa contínua) e nenhum erro.
+
 ### TASK-16 — Publicação na Play Store (track interno)
 **Prioridade:** Baixa  
 **Arquivos:** `android/app/build.gradle.kts`, keystore  
