@@ -1307,6 +1307,19 @@ SIM — valia para toda confirmação CRITICAL. Trocado por `MollyRespostas`
 6 manchetes numeradas com política apesar do prompt — escolha movida para
 o servidor. "Ela não responde" (notícias) não reproduzido.
 
+### Parte 12 — Versão 1.7.0 e experimento de eco (MOLLY-43)
+
+Manual atualizado nos dois lugares (o do app não lê o `.md`), versão
+1.7.0+25, APK na pasta VERSÕES, push do `main` (até 03f6838) — antes do
+push, varredura dos commits por chaves (nenhuma).
+
+Experimento de interromper pela voz, em branch própria: tela que mede o
+microfone em 5 fases e escreve `ECO_TESTE` no log. Achado ao ler o plugin
+`record`: o padrão `audioInterruption: pause` pausaria a gravação assim
+que a Molly começasse a falar — a medição daria "silêncio" e pareceria
+que o eco foi cancelado. Usado `none`. Medição ainda não feita (precisa do
+usuário); o aparelho ficou com o build de teste.
+
 ---
 
 ## Regra de ouro para este projeto

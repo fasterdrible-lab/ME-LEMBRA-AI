@@ -104,6 +104,52 @@ em Python e provedores de reconhecimento e síntese **em tempo real**
 internet boa. Para o público e o tamanho do app hoje, não compensa antes
 de esgotar 3a/3b.
 
+## 5. Experimento de eco (3b) — preparado, aguardando a medição
+
+Branch **`feature/molly-interromper-voz`** (não vai para a versão do
+usuário). Tela `lib/features/molly/screens/molly_eco_teste_screen.dart`,
+rota `/molly-eco-teste` — roda sozinha ao abrir e escreve no log linhas
+`ECO_TESTE <fase> aec=<bool> n=<amostras> mediana=… p90=… max=… dBFS`.
+
+| Fase | O que acontece | Para que serve |
+|---|---|---|
+| `1_silencio_aec` | silêncio, com cancelamento de eco | ruído do ambiente |
+| `2_molly_aec` | a Molly fala sozinha, com cancelamento | quanto da voz dela vaza no microfone |
+| `3_molly_sem_aec` | a Molly fala sozinha, sem cancelamento (fonte `mic`) | referência: o eco bruto |
+| `4_voce_aec` | a pessoa fala sozinha, com cancelamento | nível da voz da pessoa |
+| `5_molly_e_voce_aec` | os dois falam juntos, com cancelamento | o caso real da interrupção |
+
+Gravação: `record` 6.2, PCM 16 bits a 16 kHz mono, `echoCancel` e
+`noiseSuppress` ligados, fonte `voiceCommunication`, e
+**`audioInterruption: none`** — o padrão do plugin (`pause`) pausa a
+gravação quando a fala da Molly toma o foco de áudio.
+
+**Critério:** dá para interromper pela voz se a fase 2 ficar perto da 1 e
+bem abaixo das fases 4 e 5 (uns 15 dB de folga no p90). Se a 2 ficar
+perto da 4, a Molly "ouviria a si mesma" e o caminho para aí — o toque
+continua sendo a forma de interromper.
+
+**Como rodar** (aparelho conectado, pessoa pronta — fases 1–3 em silêncio,
+4 contando até 15, 5 contando até 20 junto com a Molly; celular na mesa a
+~30 cm, volume de mídia no máximo):
+
+```powershell
+# na branch feature/molly-interromper-voz, build em C:\MeLembraAI
+flutter build apk --debug
+adb install -r build\app\outputs\flutter-apk\app-debug.apk
+adb logcat -c
+adb shell am start -n com.melembra.ai/.MainActivity --es route /molly-eco-teste
+adb logcat -d | Select-String ECO_TESTE
+```
+
+> O comando `am start … --es route` ainda **não foi executado** (a medição
+> depende de o usuário estar pronto). Se a rota não abrir assim, navegar
+> até ela precisa de um botão temporário. Depois da medição, reinstalar o
+> release 1.7.0 (`me-lembra-ai-v1.7.0.apk`).
+
+**Estado em 13/10/2026:** APK de teste (debug, 1.7.0+25 com a rota extra)
+instalado no R9QL200MJ0N; medição não feita.
+
 ## Ordem sugerida
 
 1. **3a — interromper por toque** (pequeno, certo, grátis).
