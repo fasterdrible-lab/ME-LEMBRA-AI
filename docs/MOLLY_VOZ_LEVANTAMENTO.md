@@ -104,7 +104,7 @@ em Python e provedores de reconhecimento e síntese **em tempo real**
 internet boa. Para o público e o tamanho do app hoje, não compensa antes
 de esgotar 3a/3b.
 
-## 5. Experimento de eco (3b) — preparado, aguardando a medição
+## 5. Experimento de eco (3b) — medido em 14/10/2026: seguir
 
 Branch **`feature/molly-interromper-voz`** (não vai para a versão do
 usuário). Tela `lib/features/molly/screens/molly_eco_teste_screen.dart`,
@@ -142,13 +142,51 @@ adb shell am start -n com.melembra.ai/.MainActivity --es route /molly-eco-teste
 adb logcat -d | Select-String ECO_TESTE
 ```
 
-> O comando `am start … --es route` ainda **não foi executado** (a medição
-> depende de o usuário estar pronto). Se a rota não abrir assim, navegar
-> até ela precisa de um botão temporário. Depois da medição, reinstalar o
-> release 1.7.0 (`me-lembra-ai-v1.7.0.apk`).
+> A rota só abre com o app fechado: com ele aberto, o `am start` só traz
+> a tarefa para a frente ("Activity not started") — rodar
+> `adb shell am force-stop com.melembra.ai` antes.
 
-**Estado em 13/10/2026:** APK de teste (debug, 1.7.0+25 com a rota extra)
-instalado no R9QL200MJ0N; medição não feita.
+### Resultado (14/10/2026, R9QL200MJ0N, Galaxy A07, Android 16)
+
+Celular na mesa, ambiente silencioso, usuário seguindo as instruções da
+tela.
+
+| Fase | n | mediana | p90 | máx. (dBFS) |
+|---|---|---|---|---|
+| `1_silencio_aec` | 50 | −58,5 | −44,8 | −40,8 |
+| `2_molly_aec` | 113 | **−90,0** | **−57,9** | −40,8 |
+| `3_molly_sem_aec` | 112 | −33,3 | −23,8 | −20,3 |
+| `4_voce_aec` | 88 | −36,9 | −20,7 | −14,2 |
+| `5_molly_e_voce_aec` | 113 | −38,5 | −19,6 | −15,7 |
+
+Leitura:
+- **O cancelamento de eco funciona neste aparelho.** Sem ele (fase 3) a voz
+  da Molly chega a −23,8 dB no p90; com ele (fase 2), −57,9 — uns 34 dB a
+  menos, abaixo até do ruído do ambiente (fase 1). A mediana −90 é silêncio
+  digital: o supressor de ruído zera os pedaços em que só a Molly fala.
+- **A voz da pessoa passa, mesmo com a Molly falando junto**: fase 5
+  (p90 −19,6) igual à fase 4 (p90 −20,7) — o cancelamento não apaga a
+  fala de quem interrompe.
+- **Folga no p90 entre a Molly sozinha e a pessoa: ~37 dB** (−57,9 vs.
+  −20,7/−19,6), bem acima dos 15 dB do critério.
+
+**Decisão: seguir** — implementar a detecção de voz durante a fala
+(próximo passo, MOLLY-44 em `TASKS.md`). Cuidados para a implementação:
+- a medição usou o `record` com fonte `voiceCommunication`; o
+  `speech_to_text` usa o `SpeechRecognizer` do sistema, que **não** tem
+  essa garantia — o certo é detectar a voz pelo `record` (limiar de
+  volume entre −40 e −35 dBFS — a calibrar; a mediana da fala foi −36,9 —
+  sustentado por ~300 ms, bem acima do −57,9 do eco)
+  e, ao detectar, parar a fala e o gravador e só então abrir o STT;
+- um aparelho só, em ambiente quieto, celular na mesa: conferir com TV
+  ligada / celular na mão antes de considerar pronto, e manter o toque
+  como forma de interromper (não substituir);
+- o pico da fase 2 (−40,8, igual ao do silêncio) mostra que um limiar só
+  de pico daria falso disparo — usar duração mínima, não um pedaço só.
+
+Depois da medição o release 1.7.0 (`me-lembra-ai-v1.7.0.apk`) foi
+reinstalado por cima (`adb install -r`, dados mantidos, sem
+`DEBUGGABLE`).
 
 ## Ordem sugerida
 
