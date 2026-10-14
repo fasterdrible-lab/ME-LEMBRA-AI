@@ -119,6 +119,13 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   @override
   void initState() {
     super.initState();
+    // MOLLY-44: falar por cima da Molly faz o mesmo que tocar o microfone.
+    // Quem está digitando pode estar num lugar barulhento (mesmo motivo de
+    // _esperarResposta) — aí só o toque interrompe.
+    _voz.aoInterromperPorVoz = () {
+      if (!mounted || _ultimaEntradaFoiTexto) return;
+      _interromperMolly(porVoz: true);
+    };
     // Espera o primeiro frame — chamar antes disso arrisca usar um
     // BuildContext ainda não totalmente montado (relevante sobretudo
     // quando o painel nasce dentro de um showModalBottomSheet).
@@ -244,7 +251,14 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
       _perguntaPendenteDesde = DateTime.now();
       return;
     }
-    await _ouvir((resposta) => aoResponder(resposta));
+    await _ouvir(
+      (resposta) => aoResponder(resposta),
+      // Sem isto, um erro do reconhecimento (ex.: não ouviu nada) deixava a
+      // tela em "Pode falar." sem dizer que precisa tocar de novo.
+      aoErro: (_) {
+        if (mounted) setState(() => _mensagem = 'Não consegui ouvir. Toque no microfone e tente de novo.');
+      },
+    );
   }
 
   /// A pergunta pendente, se ainda valer — e a consome (uma resposta só).
@@ -305,15 +319,16 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// Tocou o microfone com a Molly falando e ninguém abriu a escuta ainda.
   bool _ouvirDepoisDeInterromper = false;
 
-  /// Corta a fala e ouve a pessoa. Se o fluxo que estava falando já ia
-  /// ouvir a resposta (pergunta sim/não, "o que você quer dizer?"), ele
-  /// mesmo abre o microfone ([_esperarResposta] desliga a flag); senão, abre
-  /// aqui. Ouvir enquanto ela fala, sem toque, é o passo seguinte (ver
-  /// `docs/MOLLY_VOZ_LEVANTAMENTO.md`).
-  void _interromperMolly() {
-    _ultimaEntradaFoiTexto = false; // tocou o microfone: a resposta vem por voz
+  /// Corta a fala e ouve a pessoa — por toque no microfone ou, desde a
+  /// MOLLY-44, falando por cima ([porVoz]; `MollyVoiceService` vigia o
+  /// microfone com o eco da Molly cancelado). Se o fluxo que estava falando
+  /// já ia ouvir a resposta (pergunta sim/não, "o que você quer dizer?"),
+  /// ele mesmo abre o microfone ([_esperarResposta] desliga a flag); senão,
+  /// abre aqui.
+  void _interromperMolly({bool porVoz = false}) {
+    _ultimaEntradaFoiTexto = false; // a resposta vem por voz
     _ouvirDepoisDeInterromper = true;
-    MollyTelemetria.registrar(MollyEvento.interrupted);
+    MollyTelemetria.registrar(MollyEvento.interrupted, {'modo': porVoz ? 'voz' : 'toque'});
     _voz.interromperFala();
     Future<void>.delayed(const Duration(milliseconds: 400), () {
       if (!mounted || !_ouvirDepoisDeInterromper) return;
@@ -508,15 +523,16 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
       return;
     }
 
-    // Conversa e desabafo (sessão 26): depois de uma resposta livre da IA,
-    // ou do acolhimento numa crise, volta a ouvir — a pessoa continua
-    // falando sem tocar em nada. Termina com despedida, silêncio ou limite.
-    if (_acoesDeConversa.contains(resultado.acao) && !_memoria.atingiuLimiteDeTurnos) {
+    // Depois de QUALQUER resposta, volta a ouvir — a pessoa continua falando
+    // sem tocar em nada. Até a sessão 26 só depois de conversa livre/crise;
+    // ampliado na sessão 27 a pedido do usuário: depois de "que horas são"
+    // ela parava de ouvir e parecia travada. Termina com despedida, silêncio
+    // (escuta vazia → "Não entendi. Toque no microfone…"), erro do
+    // microfone ou limite de turnos.
+    if (!_memoria.atingiuLimiteDeTurnos && !_sosDisparado && mounted) {
       await _esperarResposta(_processarFala);
     }
   }
-
-  static const _acoesDeConversa = {'conversa', 'crise', 'avisarFamiliaCrise', 'crise_sem_aviso'};
 
   /// TAREFA 20: "manda mensagem pro meu filho" sem dizer o quê — a pergunta
   /// já foi falada; ouve a próxima fala e manda ela como mensagem. SOCORRO

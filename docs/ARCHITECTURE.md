@@ -728,6 +728,12 @@ lib/
                                       # Sessão 25: + contatoEmergencia ("quem
                                       # é meu contato de emergência?" →
                                       # ProfileTool.getEmergencyContacts)
+        molly_interrupcao_voz.dart   # MOLLY-44 (sessão 27): DetectorDeVoz
+                                      # (puro: −40 dBFS por 300 ms) +
+                                      # VigiaDeInterrupcao (record,
+                                      # voiceCommunication + eco cancelado)
+                                      # — ouve enquanto a Molly fala; falar
+                                      # por cima = tocar o microfone
         molly_voice_service.dart     # STT+TTS (TAREFA 5) — única classe
                                       # instanciável da MOLLY; estados
                                       # idle/listening/thinking/speaking/
