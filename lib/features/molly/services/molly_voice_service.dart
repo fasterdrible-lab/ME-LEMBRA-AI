@@ -175,6 +175,7 @@ class MollyVoiceService {
     await _vigiarDuranteAFala();
     await VoiceService.speak(texto);
     await _vigia.parar();
+    _depoisDaFala();
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
@@ -191,6 +192,7 @@ class MollyVoiceService {
     await _vigiarDuranteAFala();
     await VoiceService.speakAll(validos);
     await _vigia.parar();
+    _depoisDaFala();
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
@@ -203,16 +205,36 @@ class MollyVoiceService {
 
   final VigiaDeInterrupcao _vigia = VigiaDeInterrupcao();
 
+  /// Segunda proteção contra barulho (sessão 27, vídeo tocando ao lado): se
+  /// a fala anterior já foi cortada pela voz e esta também seria, sem
+  /// nenhuma fala terminar inteira no meio, é barulho, não a pessoa — a Molly
+  /// termina de falar e, até fechar o painel, só o toque interrompe. Sem
+  /// isto ela se cortava a cada resposta e parecia travada ouvindo.
+  final ValueNotifier<bool> barulhoPorPerto = ValueNotifier(false);
+  int _cortesPorVozSeguidos = 0;
+  bool _cortadaPorVoz = false;
+
   /// O microfone de vigia fecha ANTES de [falar] voltar (o `await
   /// _vigia.parar()`): quem pergunta algo e já vai ouvir a resposta não
   /// disputa o microfone com ele.
   Future<void> _vigiarDuranteAFala() async {
-    if (aoInterromperPorVoz == null) return;
+    _cortadaPorVoz = false;
+    if (aoInterromperPorVoz == null || barulhoPorPerto.value) return;
     if (!await SettingsService.getMollyInterromperPorVoz()) return;
     _vigia.iniciar(aoDetectarVoz: () {
       if (_descartado || estado.value != MollyVoiceState.speaking) return;
+      if (++_cortesPorVozSeguidos >= 2) {
+        debugPrint('MOLLY_VIGIA barulho por perto — só o toque interrompe agora');
+        barulhoPorPerto.value = true;
+        return;
+      }
+      _cortadaPorVoz = true;
       aoInterromperPorVoz?.call();
     });
+  }
+
+  void _depoisDaFala() {
+    if (!_cortadaPorVoz) _cortesPorVozSeguidos = 0;
   }
 
   /// Interrompe a fala em andamento: quando a pessoa toca o microfone com a
@@ -242,5 +264,6 @@ class MollyVoiceService {
     _speech.stop();
     estado.dispose();
     textoParcial.dispose();
+    barulhoPorPerto.dispose();
   }
 }

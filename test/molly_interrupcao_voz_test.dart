@@ -47,6 +47,32 @@ void main() {
     expect(disparo(DetectorDeVoz(), [-20, -20, -20, -20, -20]), isNull);
   });
 
+  // Sessão 27: vídeo tocando ao lado — fala contínua em torno de −35 dBFS,
+  // acima do −40 fixo. O cancelamento de eco não tira esse som.
+  final video = [for (var i = 0; i < 120; i++) [-36.0, -33.0, -38.0, -30.0, -41.0][i % 5]];
+
+  test('vídeo tocando ao lado (fundo ~−35) não dispara', () {
+    final d = DetectorDeVoz();
+    expect(disparo(d, video), isNull);
+    expect(d.limiarAtual, greaterThan(-30));
+  });
+
+  test('pessoa falando alto por cima do vídeo ainda dispara', () {
+    expect(disparo(DetectorDeVoz(), [...video.take(25), -20, -18, -22, -19, -21]), isNotNull);
+  });
+
+  test('sala quieta: limiar continua −40', () {
+    final d = DetectorDeVoz();
+    disparo(d, [...carencia, -90, -58, -90, -58]);
+    expect(d.limiarAtual, -40);
+  });
+
+  test('quem fala por cima não sobe o próprio limiar', () {
+    final d = DetectorDeVoz(duracaoMinima: const Duration(seconds: 2));
+    disparo(d, [...carencia, for (var i = 0; i < 20; i++) -25.0]);
+    expect(d.limiarAtual, -40);
+  });
+
   test('nivelDb: silêncio, metade e máximo', () {
     Uint8List pcm(int valor, [int amostras = 160]) {
       final b = ByteData(amostras * 2);

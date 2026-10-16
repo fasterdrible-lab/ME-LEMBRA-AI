@@ -13,32 +13,65 @@ import 'package:record/record.dart';
 /// −36,9 e p90 −20,7. Por isso o limiar fica em −40 e um pico isolado nunca
 /// basta: precisa de [duracaoMinima] de som acima dele, tolerando só uma
 /// pausa curta entre sílabas ([quedasToleradas] pedaços seguidos abaixo).
+///
+/// Barulho de fundo (teste no aparelho, sessão 27: vídeo tocando ao lado):
+/// o cancelamento de eco só tira a voz da própria Molly, e o som do vídeo
+/// passava do −40 — ela se cortava sozinha e ficava ouvindo o vídeo. Por isso
+/// o limiar sobe para [margemSobreFundoDb] acima do fundo (mediana dos
+/// últimos [janelaDoFundo] pedaços que não eram voz). Em sala quieta o fundo
+/// fica perto de −60/−90 e o limiar continua −40.
 class DetectorDeVoz {
   DetectorDeVoz({
     this.limiarDb = -40,
     this.duracaoMinima = const Duration(milliseconds: 300),
     this.carenciaInicial = const Duration(milliseconds: 400),
     this.quedasToleradas = 1,
+    this.margemSobreFundoDb = 10,
+    this.janelaDoFundo = 25,
   });
 
   final double limiarDb;
   final Duration duracaoMinima;
 
   /// O cancelamento de eco leva um instante para se ajustar quando a Molly
-  /// começa a falar — nada conta nesse começo.
+  /// começa a falar — nada conta nesse começo (mas já mede o fundo).
   final Duration carenciaInicial;
   final int quedasToleradas;
+  final double margemSobreFundoDb;
+
+  /// Em pedaços (~80 ms cada no A07): 25 ≈ 2 s.
+  final int janelaDoFundo;
 
   Duration _decorrido = Duration.zero;
   Duration _acimaDoLimiar = Duration.zero;
   int _quedasSeguidas = 0;
+  final List<double> _fundo = [];
+
+  /// Limiar em uso agora: [limiarDb], ou mais alto se o fundo for barulhento.
+  double get limiarAtual {
+    if (_fundo.isEmpty) return limiarDb;
+    final ordenados = [..._fundo]..sort();
+    return math.max(limiarDb, ordenados[ordenados.length ~/ 2] + margemSobreFundoDb);
+  }
+
+  void _medirFundo(double nivelDb) {
+    _fundo.add(nivelDb);
+    if (_fundo.length > janelaDoFundo) _fundo.removeAt(0);
+  }
 
   /// Acrescenta um pedaço de [duracao] com volume [nivelDb]. Devolve `true`
   /// no pedaço em que a voz fica sustentada o bastante.
   bool adicionar(double nivelDb, Duration duracao) {
     _decorrido += duracao;
-    if (_decorrido <= carenciaInicial) return false;
-    if (nivelDb >= limiarDb) {
+    if (_decorrido <= carenciaInicial) {
+      _medirFundo(nivelDb);
+      return false;
+    }
+    final limiar = limiarAtual;
+    // Só o que não parece voz entra no fundo — senão quem fala por cima
+    // subiria o próprio limiar.
+    if (nivelDb < limiar) _medirFundo(nivelDb);
+    if (nivelDb >= limiar) {
       _acimaDoLimiar += duracao;
       _quedasSeguidas = 0;
     } else if (++_quedasSeguidas > quedasToleradas) {
@@ -121,12 +154,17 @@ class VigiaDeInterrupcao {
         return;
       }
       final detector = DetectorDeVoz();
+      _niveis.clear();
       _assinatura = fluxo.listen((bytes) {
         if (geracao != _geracao) return;
         final nivel = DetectorDeVoz.nivelDb(bytes);
         if (nivel == null) return;
-        if (detector.adicionar(nivel, DetectorDeVoz.duracaoDoPedaco(bytes.length))) {
+        _niveis.add(nivel);
+        final detectou = detector.adicionar(nivel, DetectorDeVoz.duracaoDoPedaco(bytes.length));
+        _limiar = detector.limiarAtual;
+        if (detectou) {
           _geracao++; // avisa uma vez só
+          _disparou = true;
           unawaited(_fechar().then((_) => aoDetectarVoz()));
         }
       });
@@ -152,7 +190,26 @@ class VigiaDeInterrupcao {
     await _fechar();
   }
 
+  // Calibração no aparelho (sessão 27): só números de volume, nunca áudio
+  // nem texto — `adb logcat | Select-String MOLLY_VIGIA`.
+  final List<double> _niveis = [];
+  bool _disparou = false;
+  double _limiar = -40;
+
+  void _registrarNiveis() {
+    if (_niveis.isEmpty) return;
+    final ordenados = [..._niveis]..sort();
+    String pct(double p) => ordenados[((ordenados.length - 1) * p).round()].toStringAsFixed(1);
+    final ultimos = _niveis.length > 8 ? _niveis.sublist(_niveis.length - 8) : _niveis;
+    debugPrint('MOLLY_VIGIA disparou=$_disparou n=${_niveis.length} limiar=${_limiar.toStringAsFixed(1)} '
+        'mediana=${pct(0.5)} p90=${pct(0.9)} max=${pct(1)} '
+        'ultimos=${ultimos.map((n) => n.toStringAsFixed(0)).join(',')}');
+    _niveis.clear();
+    _disparou = false;
+  }
+
   Future<void> _fechar() async {
+    _registrarNiveis();
     final assinatura = _assinatura;
     final gravador = _gravador;
     _assinatura = null;

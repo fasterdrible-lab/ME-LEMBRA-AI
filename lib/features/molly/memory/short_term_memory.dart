@@ -48,6 +48,11 @@ class ShortTermMemory {
   /// os turnos seguintes passam a preencher [slotDia]/[slotHora] etc.
   /// localmente, sem voltar à IA.
   bool coletandoLembrete = false;
+
+  /// Respostas seguidas, na coleta, sem o dia/hora que faltava. Sessão 27:
+  /// com um vídeo tocando ao lado ela repetia "Para qual dia?" até o limite
+  /// de turnos — o painel desiste na segunda.
+  int coletaSemResposta = 0;
   int? slotDia, slotMes, slotAno;
   int? slotHora, slotMinuto;
 
@@ -78,6 +83,7 @@ class ShortTermMemory {
   /// do remédio"), o título sairia da pergunta errada.
   void iniciarColetaDeLembrete(String fala) {
     coletandoLembrete = true;
+    coletaSemResposta = 0;
     _primeiraFala = fala;
   }
 
@@ -141,6 +147,7 @@ class ShortTermMemory {
     _turnos = 0;
     _primeiraFala = null;
     coletandoLembrete = false;
+    coletaSemResposta = 0;
     slotDia = slotMes = slotAno = null;
     slotHora = slotMinuto = null;
   }
