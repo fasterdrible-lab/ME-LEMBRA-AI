@@ -28,6 +28,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
   bool _carregando = true;
   bool _ativa = true;
   bool _respostaPorVoz = true;
+  bool _interromperPorVoz = true;
   bool _vozLenta = false;
   bool _memoria = false;
   bool _companhia = false;
@@ -51,6 +52,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
       SettingsService.getMollyAvisosProativos(),
       SettingsService.getBriefingDiario(),
       SettingsService.getAvisarFamiliaRemedio(),
+      SettingsService.getMollyInterromperPorVoz(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -62,6 +64,7 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
       _avisos = valores[5];
       _briefing = valores[6];
       _avisarFamilia = valores[7];
+      _interromperPorVoz = valores[8];
       _carregando = false;
     });
   }
@@ -114,6 +117,17 @@ class _MollySettingsScreenState extends State<MollySettingsScreen> {
                     aoMudar: (v) {
                       setState(() => _respostaPorVoz = v);
                       SettingsService.setMollyRespostaPorVoz(v);
+                    },
+                  ),
+                  const Divider(height: 1),
+                  _interruptor(
+                    titulo: 'Interromper falando',
+                    ligado: 'Se você falar enquanto a Molly fala, ela para e escuta você.',
+                    desligado: 'Para interromper a Molly, toque no microfone.',
+                    valor: _interromperPorVoz,
+                    aoMudar: (v) {
+                      setState(() => _interromperPorVoz = v);
+                      SettingsService.setMollyInterromperPorVoz(v);
                     },
                   ),
                   const Divider(height: 1),

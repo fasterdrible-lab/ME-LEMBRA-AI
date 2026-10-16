@@ -50,6 +50,7 @@ class MollyTelemetria {
         'acao' => _acoesDaIA.contains(valor),
         'tipo' => _tiposDeErro.contains(valor) || MollySafetyIntent.values.any((i) => i.name == valor),
         'origem' => valor == 'tela' || valor == 'atalho',
+        'modo' => valor == 'voz' || valor == 'toque',
         'resultado' => valor == 'criado' || valor == 'pergunta_hora',
         _ => false,
       };

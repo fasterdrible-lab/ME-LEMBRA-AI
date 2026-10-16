@@ -119,6 +119,13 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   @override
   void initState() {
     super.initState();
+    // MOLLY-44: falar por cima da Molly faz o mesmo que tocar o microfone.
+    // Quem está digitando pode estar num lugar barulhento (mesmo motivo de
+    // _esperarResposta) — aí só o toque interrompe.
+    _voz.aoInterromperPorVoz = () {
+      if (!mounted || _ultimaEntradaFoiTexto) return;
+      _interromperMolly(porVoz: true);
+    };
     // Espera o primeiro frame — chamar antes disso arrisca usar um
     // BuildContext ainda não totalmente montado (relevante sobretudo
     // quando o painel nasce dentro de um showModalBottomSheet).
@@ -244,7 +251,14 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
       _perguntaPendenteDesde = DateTime.now();
       return;
     }
-    await _ouvir((resposta) => aoResponder(resposta));
+    await _ouvir(
+      (resposta) => aoResponder(resposta),
+      // Sem isto, um erro do reconhecimento (ex.: não ouviu nada) deixava a
+      // tela em "Pode falar." sem dizer que precisa tocar de novo.
+      aoErro: (_) {
+        if (mounted) setState(() => _mensagem = 'Não consegui ouvir. Toque no microfone e tente de novo.');
+      },
+    );
   }
 
   /// A pergunta pendente, se ainda valer — e a consome (uma resposta só).
@@ -305,15 +319,16 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// Tocou o microfone com a Molly falando e ninguém abriu a escuta ainda.
   bool _ouvirDepoisDeInterromper = false;
 
-  /// Corta a fala e ouve a pessoa. Se o fluxo que estava falando já ia
-  /// ouvir a resposta (pergunta sim/não, "o que você quer dizer?"), ele
-  /// mesmo abre o microfone ([_esperarResposta] desliga a flag); senão, abre
-  /// aqui. Ouvir enquanto ela fala, sem toque, é o passo seguinte (ver
-  /// `docs/MOLLY_VOZ_LEVANTAMENTO.md`).
-  void _interromperMolly() {
-    _ultimaEntradaFoiTexto = false; // tocou o microfone: a resposta vem por voz
+  /// Corta a fala e ouve a pessoa — por toque no microfone ou, desde a
+  /// MOLLY-44, falando por cima ([porVoz]; `MollyVoiceService` vigia o
+  /// microfone com o eco da Molly cancelado). Se o fluxo que estava falando
+  /// já ia ouvir a resposta (pergunta sim/não, "o que você quer dizer?"),
+  /// ele mesmo abre o microfone ([_esperarResposta] desliga a flag); senão,
+  /// abre aqui.
+  void _interromperMolly({bool porVoz = false}) {
+    _ultimaEntradaFoiTexto = false; // a resposta vem por voz
     _ouvirDepoisDeInterromper = true;
-    MollyTelemetria.registrar(MollyEvento.interrupted);
+    MollyTelemetria.registrar(MollyEvento.interrupted, {'modo': porVoz ? 'voz' : 'toque'});
     _voz.interromperFala();
     Future<void>.delayed(const Duration(milliseconds: 400), () {
       if (!mounted || !_ouvirDepoisDeInterromper) return;
@@ -384,14 +399,33 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     _voz.marcarPensando();
 
     if (_memoria.coletandoLembrete) {
+      if (_ehDesistencia(limpo)) {
+        _memoria.encerrar();
+        await _falarResultado(MollyToolResult.sucesso('Tudo bem, deixei pra lá.'));
+        return;
+      }
       // Já sabemos que é um lembrete faltando dia/hora — extração local e
       // determinística a partir desta resposta, sem voltar à IA (mesma
       // regra de elderly_screen.dart, achado da sessão 22).
+      final faltava = (dia: !_memoria.temDia, hora: !_memoria.temHora);
       _memoria.mesclarSlots(
         data: MollyReminderParser.extrairData(limpo),
         hora: MollyReminderParser.extrairHora(limpo),
       );
-      await _falarResultado(await _perguntarProximoCampoOuFinalizar());
+      final avancou = (faltava.dia && _memoria.temDia) || (faltava.hora && _memoria.temHora);
+      if (avancou) {
+        _memoria.coletaSemResposta = 0;
+      } else if (++_memoria.coletaSemResposta >= 2) {
+        // Sessão 27: sem isto, com barulho ao lado (ou um pedido que a IA
+        // confundiu com lembrete) ela repetia "Para qual dia?" sem parar.
+        // Não volta a ouvir: a pessoa toca o microfone quando quiser.
+        _memoria.encerrar();
+        const fala = 'Não consegui entender. Vou deixar esse lembrete para depois. Quando quiser, toque no microfone.';
+        if (mounted) setState(() => _mensagem = fala);
+        await _voz.falar(fala);
+        return;
+      }
+      await _falarResultado(await _perguntarProximoCampoOuFinalizar(naoEntendeu: !avancou));
     } else {
       final contexto = await MollyContextService.montar(memoria: _memoria);
       final resultado = await MollyAgentService.processar(
@@ -428,12 +462,21 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
   /// [MollyRiskPolicy] (mesmo caminho de qualquer outra ferramenta da
   /// MOLLY — nunca grava no Firestore direto) e encerra a conversa, mesma
   /// regra de `elderly_screen.dart`._finalizarOuPerguntarProximoCampo.
-  Future<MollyToolResult> _perguntarProximoCampoOuFinalizar() async {
+  ///
+  /// [naoEntendeu]: a resposta anterior não trouxe o que faltava — pergunta
+  /// de novo com um exemplo, em vez de repetir a mesma frase.
+  Future<MollyToolResult> _perguntarProximoCampoOuFinalizar({bool naoEntendeu = false}) async {
     if (!_memoria.temDia) {
-      return MollyToolResult.esclarecimento('Para qual dia?', acao: 'coletar_dia');
+      return MollyToolResult.esclarecimento(
+        naoEntendeu ? 'Não entendi o dia. Pode dizer, por exemplo, amanhã ou sexta-feira?' : 'Para qual dia?',
+        acao: 'coletar_dia',
+      );
     }
     if (!_memoria.temHora) {
-      return MollyToolResult.esclarecimento('Que horas?', acao: 'coletar_hora');
+      return MollyToolResult.esclarecimento(
+        naoEntendeu ? 'Não entendi a hora. Pode dizer, por exemplo, às três da tarde?' : 'Que horas?',
+        acao: 'coletar_hora',
+      );
     }
 
     final origem = _memoria.primeiraFala ?? '';
@@ -508,26 +551,32 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
       return;
     }
 
-    // Conversa e desabafo (sessão 26): depois de uma resposta livre da IA,
-    // ou do acolhimento numa crise, volta a ouvir — a pessoa continua
-    // falando sem tocar em nada. Termina com despedida, silêncio ou limite.
-    if (_acoesDeConversa.contains(resultado.acao) && !_memoria.atingiuLimiteDeTurnos) {
+    // Depois de QUALQUER resposta, volta a ouvir — a pessoa continua falando
+    // sem tocar em nada. Até a sessão 26 só depois de conversa livre/crise;
+    // ampliado na sessão 27 a pedido do usuário: depois de "que horas são"
+    // ela parava de ouvir e parecia travada. Termina com despedida, silêncio
+    // (escuta vazia → "Não entendi. Toque no microfone…"), erro do
+    // microfone ou limite de turnos.
+    if (!_memoria.atingiuLimiteDeTurnos && !_sosDisparado && mounted) {
       await _esperarResposta(_processarFala);
     }
   }
 
-  static const _acoesDeConversa = {'conversa', 'crise', 'avisarFamiliaCrise', 'crise_sem_aviso'};
-
   /// TAREFA 20: "manda mensagem pro meu filho" sem dizer o quê — a pergunta
   /// já foi falada; ouve a próxima fala e manda ela como mensagem. SOCORRO
   /// continua checado durante a escuta; "deixa pra lá"/"cancela" desiste.
+  /// "Cancela", "deixa pra lá", "esquece": desiste do que a Molly está
+  /// perguntando (mensagem para a família, dia/hora do lembrete).
+  static bool _ehDesistencia(String texto) =>
+      RegExp(r'^(cancela|cancelar|deixa pra l|deixa para l|esquece)').hasMatch(texto.trim().toLowerCase());
+
   Future<void> _coletarMensagem(String? nomeFamiliar) async {
     if (nomeFamiliar == null || !mounted) return;
     await _esperarResposta((resposta) async {
       if (_sosDisparado) return;
       final texto = resposta.trim();
       if (mounted) setState(() => _mensagem = texto.isEmpty ? 'Não entendi.' : texto);
-      if (texto.isEmpty || RegExp(r'^(cancela|cancelar|deixa pra l|deixa para l|esquece)').hasMatch(texto.toLowerCase())) {
+      if (texto.isEmpty || _ehDesistencia(texto)) {
         const fala = 'Tudo bem, não mandei nada.';
         if (mounted) setState(() => _mensagem = fala);
         await _voz.falar(fala);
@@ -739,11 +788,15 @@ class _MollyAssistantPanelState extends State<MollyAssistantPanel> {
     final tecladoAberto = MediaQuery.viewInsetsOf(context).bottom > 0;
     final botaoMic = ValueListenableBuilder<MollyVoiceState>(
       valueListenable: _voz.estado,
-      builder: (context, estado, _) => _BotaoMicrofone(
-        ouvindo: estado == MollyVoiceState.listening,
-        falando: estado == MollyVoiceState.speaking,
-        onTap: _tocarMicrofone,
-        tamanho: tecladoAberto ? 72 : 120,
+      builder: (context, estado, _) => ValueListenableBuilder<bool>(
+        valueListenable: _voz.barulhoPorPerto,
+        builder: (context, barulho, _) => _BotaoMicrofone(
+          ouvindo: estado == MollyVoiceState.listening,
+          falando: estado == MollyVoiceState.speaking,
+          barulhoPorPerto: barulho,
+          onTap: _tocarMicrofone,
+          tamanho: tecladoAberto ? 72 : 120,
+        ),
       ),
     );
     final campoTexto = _CampoDeTexto(
@@ -888,7 +941,16 @@ class _BotaoMicrofone extends StatelessWidget {
   final VoidCallback onTap;
   final double tamanho;
 
-  const _BotaoMicrofone({required this.ouvindo, required this.onTap, this.falando = false, this.tamanho = 120});
+  /// Falar por cima foi desligado por barulho (`MollyVoiceService.barulhoPorPerto`).
+  final bool barulhoPorPerto;
+
+  const _BotaoMicrofone({
+    required this.ouvindo,
+    required this.onTap,
+    this.falando = false,
+    this.barulhoPorPerto = false,
+    this.tamanho = 120,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -900,8 +962,12 @@ class _BotaoMicrofone extends StatelessWidget {
         botao,
         const SizedBox(height: 8),
         // Sem isso, ninguém descobre que dá pra interromper.
-        const ExcludeSemantics(
-          child: Text('Toque para interromper', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        ExcludeSemantics(
+          child: Text(
+            barulhoPorPerto ? 'Tem barulho por perto.\nToque para interromper' : 'Toque para interromper',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
         ),
       ],
     );

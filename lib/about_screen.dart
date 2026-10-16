@@ -25,7 +25,7 @@ class _AboutScreenState extends State<AboutScreen> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _versao = info.version);
     } catch (_) {
-      if (mounted) setState(() => _versao = '1.7.0');
+      if (mounted) setState(() => _versao = '1.7.1');
     }
   }
 
@@ -65,7 +65,7 @@ class _AboutScreenState extends State<AboutScreen> {
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(
-                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.7.0',
+                  _versao.isNotEmpty ? 'Versão $_versao' : 'Versão 1.7.1',
                   style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
                 const SizedBox(height: 8),
@@ -107,9 +107,10 @@ class _AboutScreenState extends State<AboutScreen> {
               'Toque em "Assistente Molly". Ela já começa a ouvir, sem precisar trocar de tela.',
               'A conversa continua: depois de responder, ela volta a ouvir sozinha. Para encerrar, diga "tchau" ou fique em silêncio.',
               'Prefere escrever? Use o campo "Ou escreva aqui", embaixo do microfone, e toque em enviar.',
-              'Para interromper a Molly enquanto ela fala, toque no microfone.',
+              'Para interromper a Molly enquanto ela fala, é só falar por cima dela. Tocar no microfone também interrompe, sempre.',
+              'Com TV, rádio ou vídeo ligado perto, ela pode achar que o som é você. Se isso acontecer duas vezes, ela avisa "Tem barulho por perto" e aí só o toque no microfone interrompe.',
               'Criar lembrete: "Me lembra do remédio às oito", "Consulta dia 15 às 14 horas", "Ligar para a Maria todo dia às 10".',
-              'Se faltar o dia ou a hora, a Molly pergunta: "Para qual dia?" ou "Que horas?". Ela já fica ouvindo: é só responder.',
+              'Se faltar o dia ou a hora, a Molly pergunta: "Para qual dia?" ou "Que horas?". Ela já fica ouvindo: é só responder. Se não entender duas vezes, deixa o lembrete para depois. Para desistir, diga "cancela" ou "deixa pra lá".',
               '"Às quatro", sem dizer "da manhã", vira 4 da tarde. "Daqui a 20 minutos" também funciona.',
               'Repetição: diga "todo dia" ou "toda segunda" para o lembrete se repetir.',
               'Ouvir lembretes: "Quais são meus lembretes de hoje?". Ela resume em poucas frases.',
@@ -235,7 +236,7 @@ class _AboutScreenState extends State<AboutScreen> {
               'Número de emergência: configure até 3 contatos SOS.',
               'Modo Proteção: mantém o detector de queda funcionando com o app fechado (veja "Modo Proteção" acima).',
               'Abrir Molly: abre a Assistente Molly em tela cheia, com a lista de lembretes de hoje.',
-              'Configurações da Molly: liga ou desliga a Molly, a resposta por voz, a memória, o modo companhia (histórias), os avisos e o bom dia às 8h. Também escolhe a velocidade da voz (lenta ou normal).',
+              'Configurações da Molly: liga ou desliga a Molly, a resposta por voz, interromper falando, a memória, o modo companhia (histórias), os avisos e o bom dia às 8h. Também escolhe a velocidade da voz (lenta ou normal).',
               'Avisar minha família sobre o remédio: se um remédio ficar 1 hora sem confirmação, quem acompanha seus lembretes recebe um aviso. Vem desligado.',
               'Notificações: liga ou desliga os alertas de lembretes.',
               'SOS por Teclas: pressione volume 5 vezes para disparar SOS com app aberto.',

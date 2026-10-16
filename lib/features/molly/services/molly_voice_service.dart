@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../../services/settings_service.dart';
 import '../../../services/voice_service.dart';
+import 'molly_interrupcao_voz.dart';
 
 /// Estado da "voz" da MOLLY, para uma UI (TAREFA 6) mostrar "Estou
 /// ouvindo" / "Pensando" / "Falando" sem precisar espiar detalhes de
@@ -67,20 +71,29 @@ class MollyVoiceService {
     _finalJaEntregue = false;
     textoParcial.value = '';
 
-    final disponivel = await _speech.initialize(
-      onStatus: (status) {
-        if (_descartado) return;
-        final aindaOuvindo = estado.value == MollyVoiceState.listening;
-        if ((status == 'done' || status == 'notListening') && aindaOuvindo) {
-          _finalizarTurno(aoReconhecerFinal);
-        }
-      },
-      onError: (erro) {
-        if (_descartado) return;
-        estado.value = MollyVoiceState.error;
-        aoErro?.call(erro.errorMsg);
-      },
-    );
+    void aoMudarStatus(String status) {
+      if (_descartado) return;
+      final aindaOuvindo = estado.value == MollyVoiceState.listening;
+      if ((status == 'done' || status == 'notListening') && aindaOuvindo) {
+        _finalizarTurno(aoReconhecerFinal);
+      }
+    }
+
+    void aoDarErro(SpeechRecognitionError erro) {
+      if (_descartado) return;
+      estado.value = MollyVoiceState.error;
+      aoErro?.call(erro.errorMsg);
+    }
+
+    final disponivel = await _speech.initialize(onStatus: aoMudarStatus, onError: aoDarErro);
+    // MOLLY-44 (achado no teste da interrupção pela voz): `SpeechToText` é
+    // uma instância única no app e o `initialize` só guarda onStatus/onError
+    // na PRIMEIRA vez — depois, ignora os novos. Sem isto, o fim de uma
+    // escuta sem resultado (silêncio, fala cortada) ia para a escuta antiga
+    // (descartada pelo painel) ou para um painel já fechado, e a Molly
+    // ficava parada em "Pode falar." — no mesmo painel e ao reabrir.
+    _speech.statusListener = aoMudarStatus;
+    _speech.errorListener = aoDarErro;
     if (_descartado) return false;
 
     if (!disponivel) {
@@ -159,7 +172,10 @@ class MollyVoiceService {
     if (!await SettingsService.getMollyRespostaPorVoz()) return;
     if (_descartado) return;
     estado.value = MollyVoiceState.speaking;
+    await _vigiarDuranteAFala();
     await VoiceService.speak(texto);
+    await _vigia.parar();
+    _depoisDaFala();
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
@@ -173,18 +189,60 @@ class MollyVoiceService {
     if (!await SettingsService.getMollyRespostaPorVoz()) return;
     if (_descartado) return;
     estado.value = MollyVoiceState.speaking;
+    await _vigiarDuranteAFala();
     await VoiceService.speakAll(validos);
+    await _vigia.parar();
+    _depoisDaFala();
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
   }
 
-  /// Interrompe a fala em andamento. Sessão 26: usada quando a pessoa toca o
-  /// microfone com a Molly falando (`MollyAssistantPanel._interromperMolly`).
-  /// Interromper pela VOZ, sem toque, exige ouvir com o eco da própria
-  /// Molly cancelado — não implementado; ver `docs/MOLLY_VOZ_LEVANTAMENTO.md`.
+  /// MOLLY-44: chamado quando a pessoa fala por cima da Molly (voz
+  /// sustentada com o eco dela cancelado). Quem usa decide o que fazer —
+  /// no painel, o mesmo que tocar o microfone. Sem isto, nada é vigiado.
+  void Function()? aoInterromperPorVoz;
+
+  final VigiaDeInterrupcao _vigia = VigiaDeInterrupcao();
+
+  /// Segunda proteção contra barulho (sessão 27, vídeo tocando ao lado): se
+  /// a fala anterior já foi cortada pela voz e esta também seria, sem
+  /// nenhuma fala terminar inteira no meio, é barulho, não a pessoa — a Molly
+  /// termina de falar e, até fechar o painel, só o toque interrompe. Sem
+  /// isto ela se cortava a cada resposta e parecia travada ouvindo.
+  final ValueNotifier<bool> barulhoPorPerto = ValueNotifier(false);
+  int _cortesPorVozSeguidos = 0;
+  bool _cortadaPorVoz = false;
+
+  /// O microfone de vigia fecha ANTES de [falar] voltar (o `await
+  /// _vigia.parar()`): quem pergunta algo e já vai ouvir a resposta não
+  /// disputa o microfone com ele.
+  Future<void> _vigiarDuranteAFala() async {
+    _cortadaPorVoz = false;
+    if (aoInterromperPorVoz == null || barulhoPorPerto.value) return;
+    if (!await SettingsService.getMollyInterromperPorVoz()) return;
+    _vigia.iniciar(aoDetectarVoz: () {
+      if (_descartado || estado.value != MollyVoiceState.speaking) return;
+      if (++_cortesPorVozSeguidos >= 2) {
+        debugPrint('MOLLY_VIGIA barulho por perto — só o toque interrompe agora');
+        barulhoPorPerto.value = true;
+        return;
+      }
+      _cortadaPorVoz = true;
+      aoInterromperPorVoz?.call();
+    });
+  }
+
+  void _depoisDaFala() {
+    if (!_cortadaPorVoz) _cortesPorVozSeguidos = 0;
+  }
+
+  /// Interrompe a fala em andamento: quando a pessoa toca o microfone com a
+  /// Molly falando (sessão 26) ou fala por cima dela (MOLLY-44) —
+  /// `MollyAssistantPanel._interromperMolly`.
   void interromperFala() {
     VoiceService.stop();
+    unawaited(_vigia.parar());
     if (!_descartado && estado.value == MollyVoiceState.speaking) {
       estado.value = MollyVoiceState.idle;
     }
@@ -201,8 +259,11 @@ class MollyVoiceService {
   /// não tratada (achado em teste ao vivo no aparelho físico).
   void dispose() {
     _descartado = true;
+    aoInterromperPorVoz = null;
+    unawaited(_vigia.parar());
     _speech.stop();
     estado.dispose();
     textoParcial.dispose();
+    barulhoPorPerto.dispose();
   }
 }

@@ -1279,15 +1279,6 @@ class _ElderlyScreenState extends State<ElderlyScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 18, color: Colors.black54),
                 ),
-              ] else ...[
-                const SizedBox(height: 10),
-                const Text(
-                  'Toque e diga, por exemplo: "me lembra de tomar remédio às 8", '
-                  '"quais são meus lembretes de hoje", "adiciona leite na lista '
-                  'de compras" ou "meus alertas".',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.black54),
-                ),
               ],
               const SizedBox(height: 16),
               ],

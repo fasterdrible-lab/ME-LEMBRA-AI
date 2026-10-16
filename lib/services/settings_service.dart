@@ -147,6 +147,15 @@ class SettingsService {
   static Future<void> setMollyRespostaPorVoz(bool v) async =>
       (await SharedPreferences.getInstance()).setBool(_kMollyRespostaPorVoz, v);
 
+  /// "Interromper falando" (MOLLY-44) — enquanto a Molly fala, o microfone
+  /// fica atento (com o eco dela cancelado) e falar por cima corta a fala,
+  /// como tocar o microfone. Desligada, só o toque interrompe.
+  static const _kMollyInterromperPorVoz = 'cfg_molly_interromper_voz';
+  static Future<bool> getMollyInterromperPorVoz() async =>
+      (await SharedPreferences.getInstance()).getBool(_kMollyInterromperPorVoz) ?? true;
+  static Future<void> setMollyInterromperPorVoz(bool v) async =>
+      (await SharedPreferences.getInstance()).setBool(_kMollyInterromperPorVoz, v);
+
   /// "Velocidade da voz: Lenta" — vale pra toda fala do app (`VoiceService`),
   /// não só a Molly. Padrão `false` (Normal).
   static const _kVozLenta = 'cfg_voz_lenta';

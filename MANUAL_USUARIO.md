@@ -1,5 +1,5 @@
 # 📱 Me Lembra Aí — Manual do Usuário
-**Versão 1.7.0** · Última atualização: outubro de 2026
+**Versão 1.7.1** · Última atualização: outubro de 2026
 
 ---
 
@@ -105,7 +105,13 @@ A **Molly** é a assistente por voz do Me Lembra Aí. Ela fala de forma simples,
 
 **Prefere escrever?** Use o campo **"Ou escreva aqui"**, embaixo do microfone, e toque no botão de enviar. Funciona igual à voz — bom para lugares barulhentos.
 
-**Para interromper a Molly** enquanto ela fala, toque no microfone: ela para na hora e começa a ouvir você.
+**Para interromper a Molly** enquanto ela fala, é só **falar por cima dela**: ela para e começa a ouvir você. Tocar no microfone também interrompe, sempre.
+
+- Com **TV, rádio ou vídeo ligado** por perto, a Molly pode achar que o som é você. Se isso acontecer duas vezes seguidas, ela passa a terminar de falar e mostra *"Tem barulho por perto. Toque para interromper"* — aí, para interromper, toque no microfone. Ao fechar e abrir a Molly de novo, volta ao normal.
+- Se você escreveu o pedido no campo de texto, ela não escuta por cima: interrompa tocando no microfone.
+- Não quer interromper falando? Desligue **Interromper falando** nas Configurações da Molly.
+
+**Quando a Molly pergunta o dia ou a hora** de um lembrete e não entende a resposta, ela pergunta mais uma vez com um exemplo (*"amanhã"*, *"às três da tarde"*). Se ainda não entender, deixa o lembrete para depois — toque no microfone e peça de novo. Para desistir na hora, diga *"cancela"* ou *"deixa pra lá"*.
 
 ### O que você pode pedir
 
@@ -189,6 +195,7 @@ Em **Configurações → Configurações da Molly**:
 |-------|-----------|
 | **Molly ativa** | Desligada, o botão "Assistente Molly" some da tela principal |
 | **Resposta por voz** | Desligada, a Molly só mostra a resposta escrita, sem falar |
+| **Interromper falando** | Ligado (padrão), falar enquanto a Molly fala faz ela parar e ouvir você. Desligado, só o toque no microfone interrompe |
 | **Velocidade da voz** | **Lenta** ou **Normal**. Vale para todas as falas do app. Ao trocar, ela fala um exemplo |
 | **Memória** | Deixa a Molly lembrar suas preferências (ex.: como gosta de ser chamado). Ela **sempre pergunta antes** de guardar |
 | **Ver o que a Molly lembra** | Mostra tudo o que ela guardou. Dá para corrigir, apagar um item ou apagar tudo |
