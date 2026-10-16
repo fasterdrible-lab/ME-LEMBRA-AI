@@ -94,6 +94,27 @@
 
 ## Pendentes
 
+> **Molly como agente inteligente (pedido do usuário, 16/10/2026):** diagnóstico e plano completos em `docs/MOLLY_AGENTE_PLANO.md`. Ordem: MOLLY-45 → 46 → 47 → 48.
+
+### MOLLY-45 — Agente com chamada de ferramentas + fim das repetições
+**Prioridade:** Alta  
+**Branch:** nova, separada do `main` até o teste no A07  
+**Descrição:** trocar o classificador de 6 ações do backend por tool calling (Groq gpt-oss / DeepSeek); a IA vê o catálogo do `MollyToolRegistry` e pode encadear até 3 passos; execução continua no app, pela `MollyRiskPolicy`. "perguntar" deixa de virar coleta de lembrete (só `createReminder` usa a coleta local). Anti-repetição no painel. Rota nova no servidor, mantendo a antiga para apps desatualizados.  
+**Aceite:** frases variadas para a mesma ação funcionam (mensagem, ligação, mudar/apagar lembrete); notícias/tempo nunca caem em "Para qual dia?"; sem fala repetida em sequência; SOCORRO intacto.
+
+### MOLLY-46 — Ações no celular
+**Prioridade:** Alta  
+**Descrição:** ligar para qualquer contato da agenda; WhatsApp com texto pronto (a pessoa toca em enviar — o Android não permite envio automático sem acessibilidade); abrir apps; alarme/cronômetro; SMS a avaliar (permissão restrita na Play Store).  
+**Pendente do usuário:** qual canal de mensagem é prioridade (WhatsApp, chat do app ou SMS).
+
+### MOLLY-47 — Buscar informação na internet
+**Prioridade:** Média  
+**Descrição:** ferramenta `searchWeb` no servidor (busca + resumo falado com a fonte), somando a tempo/notícias/curiosidades.
+
+### MOLLY-48 — Iniciativa da Molly
+**Prioridade:** Média  
+**Descrição:** rotinas, puxar conversa, avisar a família quando algo foge do normal — sempre opt-in.
+
 ### MOLLY-44 — Interromper a Molly pela voz: implementação (TAREFA 33)
 **Prioridade:** Média  
 **Branch:** `feature/molly-interromper-voz` (não mexe no `main`)  
